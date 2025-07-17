@@ -1,0 +1,1 @@
+"""IDE integration modules for writing personality configurations."""

@@ -1,0 +1,1 @@
+"""Data models and validation for the personality system."""
