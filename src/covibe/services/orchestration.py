@@ -1,0 +1,370 @@
+"""
+Request orchestration system for coordinating personality configuration workflows.
+
+This module provides the central orchestrator that manages the async workflow between
+different components: research → context generation → IDE integration.
+"""
+
+import asyncio
+import logging
+from datetime import datetime, timedelta
+from typing import Dict, List, Optional, Union, Any
+from dataclasses import dataclass
+from pathlib import Path
+
+from ..models.core import (
+    PersonalityRequest, PersonalityProfile, PersonalityConfig,
+    ResearchResult, ErrorResponse, ErrorDetail
+)
+from .research import research_personality
+from .context_generation import generate_personality_context
+from ..integrations.ide_detection import detect_ides, get_primary_ide
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class OrchestrationResult:
+    """Result of orchestrated personality configuration process."""
+    success: bool
+    config: Optional[PersonalityConfig] = None
+    error: Optional[ErrorDetail] = None
+    partial_results: Optional[Dict[str, Any]] = None
+
+
+@dataclass
+class CacheEntry:
+    """Cache entry for personality research results."""
+    result: ResearchResult
+    timestamp: datetime
+    ttl_hours: int = 24
+    
+    @property
+    def is_expired(self) -> bool:
+        """Check if cache entry has expired."""
+        return datetime.now() > self.timestamp + timedelta(hours=self.ttl_hours)
+
+
+class PersonalityCache:
+    """Simple in-memory cache for personality research results."""
+    
+    def __init__(self):
+        self._cache: Dict[str, CacheEntry] = {}
+    
+    def get(self, query: str) -> Optional[ResearchResult]:
+        """Get cached research result if available and not expired."""
+        entry = self._cache.get(query.lower())
+        if entry and not entry.is_expired:
+            logger.info(f"Cache hit for personality query: {query}")
+            return entry.result
+        elif entry and entry.is_expired:
+            # Clean up expired entry
+            del self._cache[query.lower()]
+        return None
+    
+    def set(self, query: str, result: ResearchResult, ttl_hours: int = 24) -> None:
+        """Cache research result with TTL."""
+        self._cache[query.lower()] = CacheEntry(
+            result=result,
+            timestamp=datetime.now(),
+            ttl_hours=ttl_hours
+        )
+        logger.info(f"Cached personality research for: {query}")
+    
+    def clear_expired(self) -> int:
+        """Remove expired cache entries and return count removed."""
+        expired_keys = [
+            key for key, entry in self._cache.items() 
+            if entry.is_expired
+        ]
+        for key in expired_keys:
+            del self._cache[key]
+        
+        if expired_keys:
+            logger.info(f"Cleared {len(expired_keys)} expired cache entries")
+        return len(expired_keys)
+
+
+# Global cache instance
+_personality_cache = PersonalityCache()
+
+
+async def orchestrate_personality_request(
+    request: PersonalityRequest,
+    project_path: Optional[Path] = None,
+    use_cache: bool = True
+) -> OrchestrationResult:
+    """
+    Orchestrate complete personality configuration workflow.
+    
+    Pipeline: research → context generation → IDE integration
+    
+    Args:
+        request: Personality configuration request
+        project_path: Optional project path for IDE integration
+        use_cache: Whether to use cached research results
+    
+    Returns:
+        OrchestrationResult with success status and results/errors
+    """
+    logger.info(f"Starting orchestration for request: {request.id}")
+    
+    try:
+        # Stage 1: Personality Research
+        research_result = await _execute_research_stage(
+            request.description, use_cache
+        )
+        
+        if not research_result.profiles:
+            return OrchestrationResult(
+                success=False,
+                error=ErrorDetail(
+                    code="RESEARCH_FAILED",
+                    message="No personality profiles found",
+                    suggestions=["Try a more specific personality description"]
+                ),
+                partial_results={"research": research_result}
+            )
+        
+        # Use the first (best) profile found
+        profile = research_result.profiles[0]
+        
+        # Stage 2: Context Generation
+        context_result = await _execute_context_stage(profile)
+        
+        if not context_result:
+            return OrchestrationResult(
+                success=False,
+                error=ErrorDetail(
+                    code="CONTEXT_GENERATION_FAILED",
+                    message="Failed to generate personality context"
+                ),
+                partial_results={
+                    "research": research_result,
+                    "profile": profile
+                }
+            )
+        
+        # Stage 3: IDE Integration (if project path provided)
+        config = None
+        if project_path:
+            config = await _execute_ide_integration_stage(
+                profile, context_result, project_path, request.id
+            )
+        
+        # Create final configuration
+        if not config:
+            config = PersonalityConfig(
+                id=request.id,
+                profile=profile,
+                context=context_result,
+                ide_type="unknown",
+                file_path="",
+                active=False,
+                created_at=datetime.now(),
+                updated_at=datetime.now()
+            )
+        
+        logger.info(f"Successfully orchestrated request: {request.id}")
+        return OrchestrationResult(success=True, config=config)
+        
+    except Exception as e:
+        logger.error(f"Orchestration failed for request {request.id}: {str(e)}")
+        return OrchestrationResult(
+            success=False,
+            error=ErrorDetail(
+                code="ORCHESTRATION_ERROR",
+                message=f"Unexpected error during orchestration: {str(e)}"
+            )
+        )
+
+
+async def _execute_research_stage(
+    description: str, 
+    use_cache: bool
+) -> ResearchResult:
+    """Execute personality research stage with caching."""
+    logger.info(f"Executing research stage for: {description}")
+    
+    # Check cache first
+    if use_cache:
+        cached_result = _personality_cache.get(description)
+        if cached_result:
+            return cached_result
+    
+    # Perform research
+    try:
+        result = await research_personality(description)
+        
+        # Cache successful results
+        if use_cache and result.profiles:
+            _personality_cache.set(description, result)
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Research stage failed: {str(e)}")
+        return ResearchResult(
+            query=description,
+            profiles=[],
+            confidence=0.0,
+            suggestions=[],
+            errors=[str(e)]
+        )
+
+
+async def _execute_context_stage(profile: PersonalityProfile) -> Optional[str]:
+    """Execute context generation stage."""
+    logger.info(f"Executing context stage for profile: {profile.name}")
+    
+    try:
+        context = generate_personality_context(profile)
+        return context
+        
+    except Exception as e:
+        logger.error(f"Context generation stage failed: {str(e)}")
+        return None
+
+
+async def _execute_ide_integration_stage(
+    profile: PersonalityProfile,
+    context: str,
+    project_path: Path,
+    request_id: str
+) -> Optional[PersonalityConfig]:
+    """Execute IDE integration stage."""
+    logger.info(f"Executing IDE integration stage for: {project_path}")
+    
+    try:
+        # Detect IDE types
+        detected_ides = detect_ides(str(project_path))
+        primary_ide = get_primary_ide(detected_ides)
+        
+        ide_type = primary_ide.type if primary_ide else "unknown"
+        file_path = primary_ide.config_path if primary_ide else ""
+        
+        # Create configuration
+        config = PersonalityConfig(
+            id=request_id,
+            profile=profile,
+            context=context,
+            ide_type=ide_type,
+            file_path=file_path,
+            active=bool(primary_ide),
+            created_at=datetime.now(),
+            updated_at=datetime.now()
+        )
+        
+        # For now, we'll just create the config without writing files
+        # The actual file writing will be implemented in the IDE writers module
+        if primary_ide:
+            logger.info(f"Detected IDE: {primary_ide.name} (confidence: {primary_ide.confidence})")
+            logger.info(f"Config would be written to: {primary_ide.config_path}")
+        else:
+            logger.info("No IDE detected, configuration created without file integration")
+        
+        return config
+        
+    except Exception as e:
+        logger.error(f"IDE integration stage failed: {str(e)}")
+        return None
+
+
+async def orchestrate_research_only(
+    description: str,
+    use_cache: bool = True
+) -> ResearchResult:
+    """
+    Orchestrate personality research only (no context generation or IDE integration).
+    
+    Args:
+        description: Personality description to research
+        use_cache: Whether to use cached results
+    
+    Returns:
+        ResearchResult with personality profiles found
+    """
+    logger.info(f"Starting research-only orchestration for: {description}")
+    
+    return await _execute_research_stage(description, use_cache)
+
+
+async def orchestrate_batch_requests(
+    requests: List[PersonalityRequest],
+    project_path: Optional[Path] = None,
+    max_concurrent: int = 3
+) -> List[OrchestrationResult]:
+    """
+    Orchestrate multiple personality requests concurrently.
+    
+    Args:
+        requests: List of personality requests to process
+        project_path: Optional project path for IDE integration
+        max_concurrent: Maximum number of concurrent requests
+    
+    Returns:
+        List of orchestration results in same order as requests
+    """
+    logger.info(f"Starting batch orchestration for {len(requests)} requests")
+    
+    semaphore = asyncio.Semaphore(max_concurrent)
+    
+    async def process_request(request: PersonalityRequest) -> OrchestrationResult:
+        async with semaphore:
+            return await orchestrate_personality_request(request, project_path)
+    
+    # Process requests concurrently
+    tasks = [process_request(req) for req in requests]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    
+    # Handle any exceptions
+    final_results = []
+    for i, result in enumerate(results):
+        if isinstance(result, Exception):
+            logger.error(f"Batch request {i} failed: {str(result)}")
+            final_results.append(OrchestrationResult(
+                success=False,
+                error=ErrorDetail(
+                    code="BATCH_REQUEST_ERROR",
+                    message=f"Request failed: {str(result)}"
+                )
+            ))
+        else:
+            final_results.append(result)
+    
+    logger.info(f"Completed batch orchestration: {len(final_results)} results")
+    return final_results
+
+
+def get_cache_stats() -> Dict[str, Any]:
+    """Get personality cache statistics."""
+    cache_size = len(_personality_cache._cache)
+    expired_count = sum(
+        1 for entry in _personality_cache._cache.values() 
+        if entry.is_expired
+    )
+    
+    return {
+        "total_entries": cache_size,
+        "expired_entries": expired_count,
+        "active_entries": cache_size - expired_count
+    }
+
+
+async def clear_cache(clear_all: bool = False) -> int:
+    """
+    Clear personality cache.
+    
+    Args:
+        clear_all: If True, clear all entries. If False, only clear expired.
+    
+    Returns:
+        Number of entries cleared
+    """
+    if clear_all:
+        count = len(_personality_cache._cache)
+        _personality_cache._cache.clear()
+        logger.info(f"Cleared all {count} cache entries")
+        return count
+    else:
+        return _personality_cache.clear_expired()

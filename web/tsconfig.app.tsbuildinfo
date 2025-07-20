@@ -1,0 +1,1 @@
+{"root":["./src/app.tsx","./src/main.tsx","./src/vite-env.d.ts","./src/components/personalitycard.tsx","./src/components/personalityform.tsx","./src/components/__tests__/personalityform.test.tsx","./src/pages/configurationspage.tsx","./src/pages/homepage.tsx","./src/services/api.ts","./src/test/setup.ts","./src/types/personality.ts"],"version":"5.8.3"}

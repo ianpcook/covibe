@@ -1,0 +1,16 @@
+{
+  "name": "agent-personality-system",
+  "version": "1.0.0",
+  "description": "Enhance coding agents with configurable personality traits",
+  "scripts": {
+    "start": "python3 start.py",
+    "dev": "python3 start.py",
+    "setup": "python -m venv .venv && source .venv/bin/activate && pip install -e . && cd web && npm install",
+    "test": "source .venv/bin/activate && python -m pytest && cd web && npm test",
+    "backend": "source .venv/bin/activate && python -c 'import uvicorn; from src.covibe.api.main import app; uvicorn.run(app, host=\"127.0.0.1\", port=8000)'",
+    "frontend": "cd web && npm run dev"
+  },
+  "keywords": ["ai", "personality", "coding-agent", "ide", "fastapi", "react"],
+  "author": "Agent Personality System",
+  "license": "MIT"
+}

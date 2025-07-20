@@ -79,6 +79,39 @@ def get_archetype_data(query: str) -> Tuple[Optional[Dict[str, Any]], float]:
                 "verbosity": "moderate"
             },
             "mannerisms": ["asks guiding questions", "shares wisdom"]
+        },
+        "monk": {
+            "name": "Wise Monk",
+            "description": "Peaceful, contemplative, wise personality",
+            "traits": ["peaceful", "wise", "contemplative", "patient"],
+            "communication_style": {
+                "tone": "calm",
+                "formality": "formal",
+                "verbosity": "moderate"
+            },
+            "mannerisms": ["speaks thoughtfully", "uses philosophical language", "emphasizes mindfulness"]
+        },
+        "genius": {
+            "name": "Brilliant Genius",
+            "description": "Highly intelligent, analytical, innovative personality",
+            "traits": ["intelligent", "analytical", "creative", "confident"],
+            "communication_style": {
+                "tone": "intellectual",
+                "formality": "mixed",
+                "verbosity": "verbose"
+            },
+            "mannerisms": ["uses complex explanations", "references advanced concepts"]
+        },
+        "teacher": {
+            "name": "Patient Teacher",
+            "description": "Educational, patient, encouraging personality",
+            "traits": ["patient", "knowledgeable", "encouraging", "systematic"],
+            "communication_style": {
+                "tone": "educational",
+                "formality": "mixed",
+                "verbosity": "moderate"
+            },
+            "mannerisms": ["explains step by step", "asks clarifying questions"]
         }
     }
     
@@ -90,13 +123,20 @@ def get_archetype_data(query: str) -> Tuple[Optional[Dict[str, Any]], float]:
             
     # Check for related terms
     archetype_keywords = {
-        "teacher": "mentor",
+        "teacher": "teacher",
         "coach": "mentor",
         "military": "drill sergeant",
         "soldier": "drill sergeant",
         "android": "robot",
         "ai": "robot",
-        "artificial intelligence": "robot"
+        "artificial intelligence": "robot",
+        "buddhist": "monk",
+        "meditation": "monk",
+        "zen": "monk",
+        "spiritual": "monk",
+        "smart": "genius",
+        "brilliant": "genius",
+        "intelligent": "genius"
     }
     
     for keyword, archetype_key in archetype_keywords.items():

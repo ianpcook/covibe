@@ -3,6 +3,7 @@
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.encoders import jsonable_encoder
 from contextlib import asynccontextmanager
 import logging
 from datetime import datetime
@@ -70,7 +71,7 @@ def create_app() -> FastAPI:
         
         return JSONResponse(
             status_code=500,
-            content=error_response.dict()
+            content=jsonable_encoder(error_response.dict())
         )
     
     # Health check endpoint
