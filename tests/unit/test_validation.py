@@ -2,7 +2,7 @@
 
 import pytest
 from datetime import datetime, timedelta
-from covibe.utils.validation import (
+from src.covibe.utils.validation import (
     sanitize_text,
     validate_personality_description,
     validate_personality_name,

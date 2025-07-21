@@ -18,6 +18,11 @@ from ..models.core import (
 )
 from .research import research_personality
 from .context_generation import generate_personality_context
+from .input_processing import (
+    analyze_personality_input, generate_personality_suggestions,
+    process_combination_personality, generate_clarification_questions,
+    InputType, InputAnalysis
+)
 from ..integrations.ide_detection import detect_ides, get_primary_ide
 from ..utils.error_handling import (
     SystemError, IntegrationError, error_handler, ErrorCategory,
@@ -92,6 +97,177 @@ class PersonalityCache:
 
 # Global cache instance
 _personality_cache = PersonalityCache()
+
+
+@error_handler(
+    category=ErrorCategory.SYSTEM,
+    operation="orchestrate_personality_request_enhanced",
+    component="orchestration"
+)
+@performance_monitor("orchestrate_personality_request_enhanced", "orchestration")
+async def orchestrate_personality_request_enhanced(
+    request: PersonalityRequest,
+    project_path: Optional[Path] = None,
+    use_cache: bool = True
+) -> OrchestrationResult:
+    """
+    Enhanced orchestration with advanced input processing.
+    
+    Pipeline: input analysis → research/combination processing → context generation → IDE integration
+    """
+    logger.info(f"Starting enhanced orchestration for request: {request.id}")
+    
+    context = ErrorContext(
+        operation="orchestrate_personality_request_enhanced",
+        component="orchestration",
+        request_id=request.id,
+        additional_data={"description": request.description}
+    )
+    
+    try:
+        # Stage 0: Advanced Input Analysis
+        input_analysis = await analyze_personality_input(request.description)
+        
+        # Handle different input types
+        if input_analysis.input_type == InputType.AMBIGUOUS:
+            # Return suggestions for ambiguous input
+            suggestions = await generate_personality_suggestions(request.description)
+            clarification_questions = await generate_clarification_questions(input_analysis)
+            
+            error_detail = ErrorDetail(
+                code="AMBIGUOUS_INPUT",
+                message=f"Multiple personalities match '{request.description}'",
+                suggestions=[s.name for s in suggestions[:3]] + [q.question for q in clarification_questions[:2]]
+            )
+            return OrchestrationResult(
+                success=False,
+                error=error_detail,
+                partial_results={
+                    "input_analysis": input_analysis,
+                    "suggestions": suggestions,
+                    "clarification_questions": clarification_questions
+                }
+            )
+        
+        elif input_analysis.input_type == InputType.UNCLEAR:
+            # Return clarification questions for unclear input
+            clarification_questions = await generate_clarification_questions(input_analysis)
+            
+            error_detail = ErrorDetail(
+                code="UNCLEAR_INPUT",
+                message=f"I need more information about '{request.description}'",
+                suggestions=[q.question for q in clarification_questions]
+            )
+            return OrchestrationResult(
+                success=False,
+                error=error_detail,
+                partial_results={
+                    "input_analysis": input_analysis,
+                    "clarification_questions": clarification_questions
+                }
+            )
+        
+        # Stage 1: Enhanced Research/Processing
+        profile = None
+        
+        if input_analysis.input_type == InputType.COMBINATION:
+            # Process combination personality
+            profile = await process_combination_personality(input_analysis)
+            if not profile:
+                # Fallback to regular research
+                research_result = await _execute_research_stage(
+                    input_analysis.primary_personality, use_cache, context
+                )
+                if research_result.profiles:
+                    profile = research_result.profiles[0]
+        else:
+            # Regular research for specific names and descriptive phrases
+            research_query = input_analysis.primary_personality or request.description
+            research_result = await _execute_research_stage(research_query, use_cache, context)
+            if research_result.profiles:
+                profile = research_result.profiles[0]
+        
+        if not profile:
+            error_detail = ErrorDetail(
+                code="RESEARCH_FAILED",
+                message="I couldn't find or create that personality",
+                suggestions=[
+                    "Try a more specific personality description",
+                    "Check the spelling of the name",
+                    "Try a different personality or archetype"
+                ]
+            )
+            return OrchestrationResult(
+                success=False,
+                error=error_detail,
+                partial_results={"input_analysis": input_analysis}
+            )
+        
+        # Stage 2: Context Generation
+        context_result = await _execute_context_stage(profile, context)
+        
+        if not context_result:
+            error_detail = ErrorDetail(
+                code="CONTEXT_GENERATION_FAILED",
+                message="I couldn't generate the personality context",
+                suggestions=[
+                    "Try again with the same personality",
+                    "Contact support if the problem persists"
+                ]
+            )
+            return OrchestrationResult(
+                success=False,
+                error=error_detail,
+                partial_results={
+                    "input_analysis": input_analysis,
+                    "profile": profile
+                }
+            )
+        
+        # Stage 3: IDE Integration
+        config = None
+        if project_path:
+            config = await _execute_ide_integration_stage(
+                profile, context_result, project_path, request.id, context
+            )
+        
+        # Create final configuration
+        if not config:
+            config = PersonalityConfig(
+                id=request.id,
+                profile=profile,
+                context=context_result,
+                ide_type="unknown",
+                file_path="",
+                active=False,
+                created_at=datetime.now(),
+                updated_at=datetime.now()
+            )
+        
+        logger.info(f"Successfully orchestrated enhanced request: {request.id}")
+        return OrchestrationResult(
+            success=True, 
+            config=config,
+            partial_results={"input_analysis": input_analysis}
+        )
+        
+    except Exception as e:
+        # Log the error with context
+        record_error(e, "orchestration")
+        
+        error_detail = ErrorDetail(
+            code="ORCHESTRATION_ERROR",
+            message="An unexpected error occurred during personality configuration",
+            suggestions=[
+                "Try again in a few moments",
+                "Contact support if the problem persists"
+            ]
+        )
+        
+        return OrchestrationResult(
+            success=False,
+            error=error_detail
+        )
 
 
 @error_handler(

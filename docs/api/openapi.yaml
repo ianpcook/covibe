@@ -1,0 +1,589 @@
+openapi: 3.0.3
+info:
+  title: Covibe API
+  description: |
+    Agent Personality System - Enhance coding agents with configurable personalities
+    
+    The Covibe API allows developers to configure personality traits for their coding agents,
+    making interactions more engaging and tailored to individual preferences.
+    
+    ## Features
+    - Multiple input methods (web, API, chat)
+    - Automatic personality research
+    - IDE integration (Cursor, Claude, Windsurf)
+    - Configuration persistence and versioning
+    - Real-time chat interface
+    
+    ## Authentication
+    API key authentication is required for most endpoints. Include your API key in the
+    `X-API-Key` header.
+    
+    ## Rate Limiting
+    - 100 requests per minute for authenticated users
+    - 10 requests per minute for unauthenticated users
+    
+  version: 0.1.0
+  contact:
+    name: Covibe Support
+    email: support@covibe.dev
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:8000
+    description: Development server
+  - url: https://api.covibe.dev
+    description: Production server
+
+security:
+  - ApiKeyAuth: []
+
+paths:
+  /health:
+    get:
+      tags:
+        - monitoring
+      summary: Health check
+      description: Check if the API service is healthy and operational
+      operationId: healthCheck
+      security: []
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: healthy
+                  timestamp:
+                    type: string
+                    format: date-time
+                  service:
+                    type: string
+                    example: covibe-api
+
+  /api/personality:
+    post:
+      tags:
+        - personality
+      summary: Create personality configuration
+      description: |
+        Create a new personality configuration by providing a personality description.
+        The system will research the personality, generate appropriate context, and
+        integrate with the detected IDE environment.
+      operationId: createPersonalityConfig
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PersonalityRequestCreate'
+            examples:
+              celebrity:
+                summary: Celebrity personality
+                value:
+                  description: "Tony Stark from Iron Man"
+                  user_id: "user123"
+                  project_path: "/path/to/project"
+                  source: "api"
+              archetype:
+                summary: Character archetype
+                value:
+                  description: "friendly mentor who explains things clearly"
+                  project_path: "/path/to/project"
+      responses:
+        '201':
+          description: Personality configuration created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalityConfigResponse'
+        '400':
+          description: Invalid request or orchestration failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/personality/configs:
+    get:
+      tags:
+        - personality
+      summary: List personality configurations
+      description: Retrieve a paginated list of personality configurations
+      operationId: listPersonalityConfigs
+      parameters:
+        - name: user_id
+          in: query
+          description: Filter by user ID
+          schema:
+            type: string
+        - name: active_only
+          in: query
+          description: Only return active configurations
+          schema:
+            type: boolean
+            default: true
+        - name: limit
+          in: query
+          description: Maximum number of configurations to return
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+        - name: offset
+          in: query
+          description: Number of configurations to skip
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: List of personality configurations
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  configurations:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PersonalityConfigResponse'
+                  pagination:
+                    $ref: '#/components/schemas/PaginationInfo'
+
+  /api/personality/research:
+    post:
+      tags:
+        - personality
+      summary: Research personality
+      description: |
+        Research a personality without creating a full configuration.
+        Useful for exploring personality options before committing to a configuration.
+      operationId: researchPersonality
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResearchOnlyRequest'
+      responses:
+        '200':
+          description: Personality research results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResearchResponse'
+
+  /api/personality/ide/detect:
+    get:
+      tags:
+        - ide
+      summary: Detect IDE environment
+      description: |
+        Analyze a project directory to detect which IDE environments are present
+        and determine the best integration approach.
+      operationId: detectIdeEnvironment
+      parameters:
+        - name: project_path
+          in: query
+          required: true
+          description: Project path to analyze for IDE detection
+          schema:
+            type: string
+      responses:
+        '200':
+          description: IDE detection results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IdeDetectionResponse'
+
+  /api/personality/{personality_id}:
+    get:
+      tags:
+        - personality
+      summary: Get personality configuration
+      description: Retrieve a specific personality configuration by ID
+      operationId: getPersonalityConfig
+      parameters:
+        - name: personality_id
+          in: path
+          required: true
+          description: Personality configuration ID
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Personality configuration details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalityConfigResponse'
+        '404':
+          description: Personality configuration not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    put:
+      tags:
+        - personality
+      summary: Update personality configuration
+      description: Update an existing personality configuration
+      operationId: updatePersonalityConfig
+      parameters:
+        - name: personality_id
+          in: path
+          required: true
+          description: Personality configuration ID
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PersonalityUpdateRequest'
+      responses:
+        '200':
+          description: Personality configuration updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalityConfigResponse'
+
+    delete:
+      tags:
+        - personality
+      summary: Delete personality configuration
+      description: Delete a personality configuration
+      operationId: deletePersonalityConfig
+      parameters:
+        - name: personality_id
+          in: path
+          required: true
+          description: Personality configuration ID
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Personality configuration deleted successfully
+        '404':
+          description: Personality configuration not found
+
+  /api/chat/ws:
+    get:
+      tags:
+        - chat
+      summary: WebSocket chat endpoint
+      description: |
+        WebSocket endpoint for real-time chat interface.
+        Supports conversational personality configuration and refinement.
+      operationId: chatWebSocket
+      responses:
+        '101':
+          description: WebSocket connection established
+        '400':
+          description: WebSocket upgrade failed
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+
+  schemas:
+    PersonalityRequestCreate:
+      type: object
+      required:
+        - description
+      properties:
+        description:
+          type: string
+          minLength: 1
+          maxLength: 500
+          description: Personality description
+          example: "Tony Stark from Iron Man"
+        user_id:
+          type: string
+          description: Optional user ID
+          example: "user123"
+        project_path:
+          type: string
+          description: Optional project path for IDE integration
+          example: "/path/to/project"
+        source:
+          $ref: '#/components/schemas/SourceType'
+
+    PersonalityUpdateRequest:
+      type: object
+      properties:
+        description:
+          type: string
+          minLength: 1
+          maxLength: 500
+          description: Updated personality description
+        project_path:
+          type: string
+          description: Updated project path for IDE integration
+
+    ResearchOnlyRequest:
+      type: object
+      required:
+        - description
+      properties:
+        description:
+          type: string
+          minLength: 1
+          maxLength: 500
+          description: Personality description to research
+          example: "Sherlock Holmes"
+        use_cache:
+          type: boolean
+          default: true
+          description: Whether to use cached results
+
+    PersonalityConfigResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique configuration ID
+        profile:
+          $ref: '#/components/schemas/PersonalityProfile'
+        context:
+          type: string
+          description: Generated context for LLM integration
+        ide_type:
+          type: string
+          description: Detected IDE type
+          example: "cursor"
+        file_path:
+          type: string
+          description: Path to IDE configuration file
+        active:
+          type: boolean
+          description: Whether the configuration is active
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    PersonalityProfile:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+          example: "Tony Stark"
+        type:
+          $ref: '#/components/schemas/PersonalityType'
+        traits:
+          type: array
+          items:
+            $ref: '#/components/schemas/PersonalityTrait'
+        communication_style:
+          $ref: '#/components/schemas/CommunicationStyle'
+        mannerisms:
+          type: array
+          items:
+            type: string
+          example: ["Uses technical jargon", "Makes pop culture references"]
+        sources:
+          type: array
+          items:
+            $ref: '#/components/schemas/ResearchSource'
+
+    PersonalityTrait:
+      type: object
+      properties:
+        category:
+          type: string
+          example: "personality"
+        trait:
+          type: string
+          example: "confident"
+        intensity:
+          type: integer
+          minimum: 1
+          maximum: 10
+          example: 8
+        examples:
+          type: array
+          items:
+            type: string
+
+    CommunicationStyle:
+      type: object
+      properties:
+        tone:
+          type: string
+          example: "confident and witty"
+        formality:
+          $ref: '#/components/schemas/FormalityLevel'
+        verbosity:
+          $ref: '#/components/schemas/VerbosityLevel'
+        technical_level:
+          $ref: '#/components/schemas/TechnicalLevel'
+
+    ResearchSource:
+      type: object
+      properties:
+        type:
+          type: string
+          example: "wikipedia"
+        url:
+          type: string
+          format: uri
+          example: "https://en.wikipedia.org/wiki/Tony_Stark"
+        confidence:
+          type: number
+          minimum: 0.0
+          maximum: 1.0
+          example: 0.95
+        last_updated:
+          type: string
+          format: date-time
+
+    ResearchResponse:
+      type: object
+      properties:
+        query:
+          type: string
+          example: "Tony Stark"
+        profiles_found:
+          type: integer
+          example: 1
+        profiles:
+          type: array
+          items:
+            type: object
+        confidence:
+          type: number
+          minimum: 0.0
+          maximum: 1.0
+        suggestions:
+          type: array
+          items:
+            type: string
+        errors:
+          type: array
+          items:
+            type: string
+
+    IdeDetectionResponse:
+      type: object
+      properties:
+        project_path:
+          type: string
+        detected_ides:
+          type: array
+          items:
+            $ref: '#/components/schemas/IdeInfo'
+        primary_ide:
+          $ref: '#/components/schemas/IdeInfo'
+        total_detected:
+          type: integer
+
+    IdeInfo:
+      type: object
+      properties:
+        name:
+          type: string
+          example: "Cursor"
+        type:
+          type: string
+          example: "cursor"
+        config_path:
+          type: string
+          example: "/project/.cursor/rules/personality.mdc"
+        confidence:
+          type: number
+          minimum: 0.0
+          maximum: 1.0
+        markers:
+          type: array
+          items:
+            type: string
+
+    PaginationInfo:
+      type: object
+      properties:
+        total:
+          type: integer
+        limit:
+          type: integer
+        offset:
+          type: integer
+        has_more:
+          type: boolean
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          $ref: '#/components/schemas/ErrorDetail'
+        request_id:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+
+    ErrorDetail:
+      type: object
+      properties:
+        code:
+          type: string
+          example: "VALIDATION_ERROR"
+        message:
+          type: string
+          example: "Invalid personality description"
+        details:
+          type: object
+        suggestions:
+          type: array
+          items:
+            type: string
+
+    SourceType:
+      type: string
+      enum: [web, api, chat]
+      example: api
+
+    PersonalityType:
+      type: string
+      enum: [celebrity, fictional, archetype, custom]
+      example: fictional
+
+    FormalityLevel:
+      type: string
+      enum: [casual, formal, mixed]
+      example: casual
+
+    VerbosityLevel:
+      type: string
+      enum: [concise, moderate, verbose]
+      example: moderate
+
+    TechnicalLevel:
+      type: string
+      enum: [beginner, intermediate, expert]
+      example: expert

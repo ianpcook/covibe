@@ -1,251 +1,326 @@
-# 🎭 Agent Personality System
+# Covibe - Agent Personality System
 
-Enhance your coding agents with configurable personality traits. Create custom personalities that influence how your AI assistants respond and interact.
+[![CI/CD Pipeline](https://github.com/covibe/covibe/workflows/CI/CD%20Pipeline/badge.svg)](https://github.com/covibe/covibe/actions)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![Docker](https://img.shields.io/badge/docker-ready-blue.svg)](https://hub.docker.com/r/covibe/backend)
+
+Transform your coding experience by adding personality to your AI coding assistants. Whether you want your agent to respond like Tony Stark, Yoda, or a patient mentor, Covibe makes it possible.
 
 ## ✨ Features
 
-- **Personality Research**: Automatically research celebrities, fictional characters, and archetypes
-- **Context Generation**: Generate LLM-ready personality contexts for coding agents
-- **IDE Integration**: Automatically integrate with Cursor, Claude, Windsurf, and other IDEs
-- **Web Interface**: User-friendly web interface for creating and managing personalities
-- **REST API**: Complete API for programmatic access
-- **Caching**: Intelligent caching for improved performance
+- **🎭 Multiple Personality Types**: Celebrities, fictional characters, archetypes, and custom personalities
+- **🔍 Intelligent Research**: Automatic personality research from multiple sources
+- **🛠️ IDE Integration**: Native support for Cursor, Claude, Windsurf, and more
+- **💬 Multiple Interfaces**: Web UI, REST API, and conversational chat
+- **💾 Persistent Storage**: Save and manage multiple personality profiles
+- **🔄 Real-time Updates**: Live personality switching and refinement
+- **📊 Monitoring**: Built-in metrics and observability
 
 ## 🚀 Quick Start
 
-### Prerequisites
+### Docker (Recommended)
 
-- Python 3.11+ with pip
-- Node.js 18+ with npm
-- Git
-
-### Installation
-
-1. **Clone the repository**
-   ```bash
-   git clone <repository-url>
-   cd agent-personality-system
-   ```
-
-2. **Set up Python environment**
-   ```bash
-   python -m venv .venv
-   source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-   pip install -e .
-   ```
-
-3. **Install frontend dependencies**
-   ```bash
-   cd web
-   npm install
-   cd ..
-   ```
-
-### 🎯 One-Command Startup
-
-**Option 1: Python Script (Recommended)**
 ```bash
-python start.py
+# Clone the repository
+git clone https://github.com/covibe/covibe.git
+cd covibe
+
+# Start with Docker Compose
+docker-compose up -d
+
+# Access the web interface
+open http://localhost:80
 ```
 
-**Option 2: Bash Script**
+### Local Development
+
 ```bash
-./start.sh
+# Install dependencies
+pip install uv
+uv sync
+
+# Start backend
+uv run uvicorn main:app --reload
+
+# Start frontend (in another terminal)
+cd web && npm install && npm run dev
 ```
 
-This will start both:
-- 🔧 **Backend API** at http://localhost:8000
-- 🌐 **Web Interface** at http://localhost:5173
-
-Press `Ctrl+C` to stop all services.
-
-## 🌐 Usage
+## 🎯 Usage Examples
 
 ### Web Interface
 
-1. Open http://localhost:5173 in your browser
-2. Enter a personality description (e.g., "Tony Stark", "friendly mentor", "sarcastic genius")
-3. Optionally specify your project path for IDE integration
-4. Click "Create Personality" to generate the configuration
+1. Open `http://localhost:8000` in your browser
+2. Enter a personality description: "Tony Stark from Iron Man"
+3. Select your project directory
+4. Click "Generate Configuration"
+5. Your coding agent now has personality!
 
-### API Documentation
+### API Usage
 
-Visit http://localhost:8000/docs for interactive API documentation with:
-- All available endpoints
-- Request/response schemas
-- Try-it-out functionality
-
-### Manual Startup (Development)
-
-If you prefer to start services separately:
-
-**Backend API:**
 ```bash
-source .venv/bin/activate
-python -c "
-import uvicorn
-from src.covibe.api.main import app
-uvicorn.run(app, host='127.0.0.1', port=8000)
-"
+# Create a personality configuration
+curl -X POST http://localhost:8000/api/personality \
+  -H "Content-Type: application/json" \
+  -d '{
+    "description": "Sherlock Holmes",
+    "project_path": "/path/to/your/project"
+  }'
+
+# List configurations
+curl http://localhost:8000/api/personality/configs
+
+# Research without creating config
+curl -X POST http://localhost:8000/api/personality/research \
+  -H "Content-Type: application/json" \
+  -d '{"description": "Albert Einstein"}'
 ```
 
-**Frontend:**
-```bash
-cd web
-npm run dev
+### Chat Interface
+
+```
+User: I want my coding agent to be like Yoda
+Covibe: Wise choice, you have made! Create a Yoda personality, I will. 
+        Patient and insightful, your agent will become...
+
+User: Make him less cryptic and more direct
+Covibe: Adjust the wisdom I will, but clearer in speech, Yoda shall be...
 ```
 
 ## 🏗️ Architecture
 
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Web Interface │    │   REST API      │    │  Orchestration  │
-│   (React/TS)    │◄──►│   (FastAPI)     │◄──►│   System        │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-                                                        │
-                       ┌─────────────────┐    ┌─────────────────┐
-                       │  Context Gen    │◄──►│   Research      │
-                       │  System         │    │   System        │
-                       └─────────────────┘    └─────────────────┘
-                                                        │
-                       ┌─────────────────┐    ┌─────────────────┐
-                       │  IDE Detection  │◄──►│  IDE Writers    │
-                       │  System         │    │  System         │
-                       └─────────────────┘    └─────────────────┘
+│   Web Interface │    │    REST API     │    │  Chat Interface │
+└─────────┬───────┘    └─────────┬───────┘    └─────────┬───────┘
+          │                      │                      │
+          └──────────────────────┼──────────────────────┘
+                                 │
+                    ┌─────────────┴─────────────┐
+                    │  Request Orchestrator     │
+                    └─────────────┬─────────────┘
+                                  │
+          ┌───────────────────────┼───────────────────────┐
+          │                       │                       │
+┌─────────┴─────────┐   ┌─────────┴─────────┐   ┌─────────┴─────────┐
+│ Personality       │   │ Context           │   │ IDE Integration   │
+│ Research          │   │ Generation        │   │ System            │
+└───────────────────┘   └───────────────────┘   └───────────────────┘
 ```
 
-## 🔧 API Endpoints
+## 🎭 Supported Personalities
 
-### Personality Management
-- `POST /api/personality/` - Create personality configuration
-- `GET /api/personality/{id}` - Get personality configuration
-- `PUT /api/personality/{id}` - Update personality configuration
-- `DELETE /api/personality/{id}` - Delete personality configuration
+### Celebrities & Historical Figures
+- **Scientists**: Einstein, Tesla, Curie, Hawking
+- **Tech Leaders**: Jobs, Gates, Musk, Torvalds
+- **Authors**: Hemingway, Tolkien, Asimov
 
-### Research & Utilities
-- `POST /api/personality/research` - Research personality only
-- `GET /api/personality/ide/detect` - Detect IDE environment
-- `GET /api/personality/configs` - List configurations
-- `GET /api/personality/cache/stats` - Cache statistics
+### Fictional Characters
+- **Sci-Fi**: Spock, Data, HAL 9000, Jarvis
+- **Fantasy**: Gandalf, Yoda, Dumbledore
+- **Literature**: Sherlock Holmes, Atticus Finch
+
+### Character Archetypes
+- **Mentor**: Patient, encouraging, educational
+- **Expert**: Authoritative, precise, comprehensive
+- **Friend**: Casual, supportive, relatable
+
+## 🛠️ IDE Integration
+
+### Supported IDEs
+
+| IDE | Configuration File | Auto-Detection |
+|-----|-------------------|----------------|
+| **Cursor** | `/cursor/rules/personality.mdc` | ✅ |
+| **Claude** | `CLAUDE.md` in project root | ✅ |
+| **Windsurf** | `.windsurf` configuration | ✅ |
+| **Generic** | Multiple format options | ✅ |
+
+### Example Configuration
+
+```markdown
+# Personality: Tony Stark
+
+You are Tony Stark from Iron Man. Respond with:
+- Confidence and wit
+- Technical expertise with a touch of arrogance
+- Pop culture references and humor
+- Direct, no-nonsense solutions
+
+Maintain technical accuracy while embodying Tony Stark's personality.
+```
+
+## 📚 Documentation
+
+- [📖 User Guide](./docs/user-guide/README.md) - Complete usage guide
+- [🚀 Quick Start](./docs/setup/quick-start.md) - Get started in 5 minutes
+- [⚙️ Installation](./docs/setup/installation.md) - Detailed installation guide
+- [🔌 API Reference](./docs/api/openapi.yaml) - OpenAPI specification
+- [🚢 Deployment](./docs/deployment/README.md) - Production deployment guide
+
+## 🔧 Development
+
+### Prerequisites
+
+- Python 3.11+
+- Node.js 18+
+- Docker & Docker Compose
+- Git
+
+### Setup
+
+```bash
+# Clone repository
+git clone https://github.com/covibe/covibe.git
+cd covibe
+
+# Backend setup
+pip install uv
+uv sync
+
+# Frontend setup
+cd web
+npm install
+
+# Run tests
+uv run pytest
+npm test
+
+# Start development servers
+uv run uvicorn main:app --reload  # Backend
+npm run dev                       # Frontend
+```
+
+### Project Structure
+
+```
+covibe/
+├── src/covibe/              # Backend source code
+│   ├── api/                 # FastAPI routes
+│   ├── models/              # Data models
+│   ├── services/            # Business logic
+│   └── utils/               # Utilities
+├── web/                     # Frontend React app
+├── tests/                   # Test suites
+├── docs/                    # Documentation
+├── monitoring/              # Monitoring configs
+└── scripts/                 # Deployment scripts
+```
 
 ## 🧪 Testing
 
-**Run all tests:**
 ```bash
-source .venv/bin/activate
-python -m pytest
-```
+# Run all tests
+uv run pytest
 
-**Run specific test suites:**
-```bash
-# Backend tests
-python -m pytest tests/unit/ tests/integration/
+# Run specific test types
+uv run pytest tests/unit/           # Unit tests
+uv run pytest tests/integration/    # Integration tests
+uv run pytest tests/e2e/           # End-to-end tests
+
+# Run with coverage
+uv run pytest --cov=src --cov-report=html
 
 # Frontend tests
-cd web
-npm test
+cd web && npm test
 ```
 
-## 🛠️ Development
+## 📊 Monitoring
 
-### Project Structure
+Covibe includes comprehensive monitoring with:
+
+- **Prometheus**: Metrics collection
+- **Grafana**: Dashboards and visualization
+- **Loki**: Log aggregation
+- **Jaeger**: Distributed tracing
+
+```bash
+# Start with monitoring
+./scripts/deploy.sh -m start
+
+# Access monitoring services
+open http://localhost:9090  # Prometheus
+open http://localhost:3000  # Grafana (admin/admin)
+open http://localhost:16686 # Jaeger
 ```
-├── src/covibe/           # Backend Python code
-│   ├── api/             # FastAPI routes and handlers
-│   ├── services/        # Core business logic
-│   ├── models/          # Data models and validation
-│   └── integrations/    # IDE detection and writers
-├── web/                 # Frontend React application
-│   ├── src/components/  # React components
-│   ├── src/pages/       # Page components
-│   ├── src/services/    # API client
-│   └── src/types/       # TypeScript types
-├── tests/               # Test suites
-└── docs/                # Documentation
+
+## 🚢 Deployment
+
+### Development
+
+```bash
+./scripts/deploy.sh start
 ```
 
-### Adding New IDE Support
+### Production
 
-1. Add detection logic in `src/covibe/integrations/ide_detection.py`
-2. Add writer logic in `src/covibe/integrations/ide_writers.py`
-3. Update context generation for IDE-specific formatting
-4. Add tests for the new IDE support
+```bash
+# Set environment variables
+export DB_PASSWORD=secure_password
+export SECRET_KEY=your_secret_key
 
-### Contributing
+# Deploy to production
+./scripts/deploy.sh -e production deploy
+```
+
+### Kubernetes
+
+```bash
+# Apply Kubernetes manifests
+kubectl apply -f k8s/
+```
+
+## 🤝 Contributing
+
+We welcome contributions! Please see our [Contributing Guide](./CONTRIBUTING.md) for details.
+
+### Quick Contribution Steps
 
 1. Fork the repository
-2. Create a feature branch
-3. Make your changes with tests
-4. Run the test suite
-5. Submit a pull request
-
-## 📝 Configuration
-
-### Environment Variables
-
-Create a `.env` file in the project root:
-
-```env
-# API Configuration
-API_BASE_URL=http://localhost:8000
-VITE_API_BASE_URL=http://localhost:8000
-
-# Research Configuration
-RESEARCH_CACHE_TTL=24  # hours
-MAX_CONCURRENT_REQUESTS=3
-
-# IDE Integration
-DEFAULT_IDE_TYPE=cursor
-```
-
-### Frontend Configuration
-
-The web interface can be configured via `web/.env`:
-
-```env
-VITE_API_BASE_URL=http://localhost:8000
-VITE_APP_TITLE=Agent Personality System
-```
-
-## 🐛 Troubleshooting
-
-### Common Issues
-
-**Port already in use:**
-- The startup script will automatically find available ports
-- Backend tries port 8000, frontend tries 5173 then finds next available
-
-**Virtual environment issues:**
-```bash
-rm -rf .venv
-python -m venv .venv
-source .venv/bin/activate
-pip install -e .
-```
-
-**Frontend dependency issues:**
-```bash
-cd web
-rm -rf node_modules package-lock.json
-npm install
-```
-
-**API connection errors:**
-- Ensure both frontend and backend are running
-- Check that backend is accessible at http://localhost:8000/health
-- Verify CORS settings in the API configuration
+2. Create a feature branch: `git checkout -b feature/amazing-feature`
+3. Make your changes
+4. Add tests for your changes
+5. Run the test suite: `uv run pytest`
+6. Commit your changes: `git commit -m 'Add amazing feature'`
+7. Push to the branch: `git push origin feature/amazing-feature`
+8. Open a Pull Request
 
 ## 📄 License
 
-[Add your license information here]
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## 🤝 Support
+## 🆘 Support
 
-For issues and questions:
-1. Check the troubleshooting section above
-2. Review the API documentation at http://localhost:8000/docs
-3. Open an issue on the repository
+- **Documentation**: [docs/](./docs/)
+- **Issues**: [GitHub Issues](https://github.com/covibe/covibe/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/covibe/covibe/discussions)
+- **Email**: support@covibe.dev
+- **Discord**: [Join our community](https://discord.gg/covibe)
+
+## 🗺️ Roadmap
+
+- [ ] **v0.2.0**: Advanced personality customization
+- [ ] **v0.3.0**: Team collaboration features
+- [ ] **v0.4.0**: Plugin system for custom integrations
+- [ ] **v0.5.0**: AI-powered personality suggestions
+- [ ] **v1.0.0**: Enterprise features and SLA
+
+## 🙏 Acknowledgments
+
+- Thanks to all contributors who have helped shape Covibe
+- Inspired by the need for more engaging AI interactions
+- Built with modern tools: FastAPI, React, Docker, and more
+
+## 📈 Stats
+
+![GitHub stars](https://img.shields.io/github/stars/covibe/covibe?style=social)
+![GitHub forks](https://img.shields.io/github/forks/covibe/covibe?style=social)
+![GitHub issues](https://img.shields.io/github/issues/covibe/covibe)
+![GitHub pull requests](https://img.shields.io/github/issues-pr/covibe/covibe)
 
 ---
 
-**Happy coding with personality! 🎭✨**
+**Made with ❤️ by the Covibe team**
+
+*Transform your coding experience, one personality at a time.*

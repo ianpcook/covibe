@@ -19,7 +19,24 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     """Application lifespan events."""
     logger.info("Starting Covibe API server")
+    
+    # Initialize database
+    try:
+        from ..utils.database import initialize_database
+        db_config = await initialize_database()
+        logger.info("Database initialized successfully")
+        app.state.db_config = db_config
+    except Exception as e:
+        logger.error(f"Failed to initialize database: {e}")
+        raise
+    
     yield
+    
+    # Cleanup
+    if hasattr(app.state, 'db_config'):
+        await app.state.db_config.close()
+        logger.info("Database connection closed")
+    
     logger.info("Shutting down Covibe API server")
 
 
@@ -30,6 +47,45 @@ def create_app() -> FastAPI:
         description="Agent Personality System - Enhance coding agents with configurable personalities",
         version="0.1.0",
         lifespan=lifespan,
+        docs_url="/docs",
+        redoc_url="/redoc",
+        openapi_url="/openapi.json",
+        contact={
+            "name": "Covibe Support",
+            "email": "support@covibe.dev",
+        },
+        license_info={
+            "name": "MIT",
+            "url": "https://opensource.org/licenses/MIT",
+        },
+        servers=[
+            {
+                "url": "http://localhost:8000",
+                "description": "Development server"
+            },
+            {
+                "url": "https://api.covibe.dev",
+                "description": "Production server"
+            }
+        ],
+        tags_metadata=[
+            {
+                "name": "personality",
+                "description": "Personality configuration and management operations",
+            },
+            {
+                "name": "chat",
+                "description": "Chat interface for conversational personality configuration",
+            },
+            {
+                "name": "ide",
+                "description": "IDE detection and integration operations",
+            },
+            {
+                "name": "monitoring",
+                "description": "System monitoring and health check endpoints",
+            },
+        ],
     )
     
     # Add CORS middleware
