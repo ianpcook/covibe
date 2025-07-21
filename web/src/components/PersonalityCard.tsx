@@ -12,6 +12,11 @@ interface PersonalityCardProps {
   onView?: (config: PersonalityConfig) => void;
   onToggleActive?: (config: PersonalityConfig) => void;
   showDetailedStatus?: boolean;
+  operationInProgress?: {
+    type: 'delete' | 'toggle' | 'update' | null;
+    configId: string | null;
+    message: string;
+  };
 }
 
 const PersonalityCard: React.FC<PersonalityCardProps> = ({
@@ -21,6 +26,7 @@ const PersonalityCard: React.FC<PersonalityCardProps> = ({
   onView,
   onToggleActive,
   showDetailedStatus = false,
+  operationInProgress,
 }) => {
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
@@ -62,8 +68,20 @@ const PersonalityCard: React.FC<PersonalityCardProps> = ({
     }
   };
 
+  const isOperationInProgress = operationInProgress?.configId === config.id;
+  const isDisabled = isOperationInProgress || (operationInProgress?.type === 'toggle' && operationInProgress?.configId !== config.id);
+
   return (
-    <div className="personality-card">
+    <div className={`personality-card ${config.active ? 'active' : 'inactive'} ${isOperationInProgress ? 'operation-in-progress' : ''}`}>
+      {isOperationInProgress && (
+        <div className="card-operation-overlay">
+          <div className="operation-indicator">
+            <div className="operation-spinner"></div>
+            <span className="operation-message">{operationInProgress?.message}</span>
+          </div>
+        </div>
+      )}
+      
       <div className="card-header">
         <div className="personality-info">
           <h3 className="personality-name">{config.profile.name}</h3>
@@ -77,8 +95,13 @@ const PersonalityCard: React.FC<PersonalityCardProps> = ({
               onClick={() => onToggleActive(config)}
               className={`btn btn-sm ${config.active ? 'btn-warning' : 'btn-success'}`}
               title={config.active ? 'Deactivate' : 'Activate'}
+              disabled={isDisabled}
             >
-              {config.active ? '⏸️' : '▶️'}
+              {isOperationInProgress && operationInProgress?.type === 'toggle' ? (
+                <div className="btn-spinner"></div>
+              ) : (
+                config.active ? '⏸️' : '▶️'
+              )}
             </button>
           )}
           {onView && (
@@ -86,6 +109,7 @@ const PersonalityCard: React.FC<PersonalityCardProps> = ({
               onClick={() => onView(config)}
               className="btn btn-sm btn-secondary"
               title="View Details"
+              disabled={isDisabled}
             >
               👁️
             </button>
@@ -95,6 +119,7 @@ const PersonalityCard: React.FC<PersonalityCardProps> = ({
               onClick={() => onEdit(config)}
               className="btn btn-sm btn-secondary"
               title="Edit"
+              disabled={isDisabled}
             >
               ✏️
             </button>
@@ -102,10 +127,15 @@ const PersonalityCard: React.FC<PersonalityCardProps> = ({
           {onDelete && (
             <button
               onClick={() => onDelete(config)}
-              className="btn btn-sm btn-danger"
+              className={`btn btn-sm btn-danger ${isOperationInProgress && operationInProgress?.type === 'delete' ? 'deleting' : ''}`}
               title="Delete"
+              disabled={isDisabled}
             >
-              🗑️
+              {isOperationInProgress && operationInProgress?.type === 'delete' ? (
+                <div className="btn-spinner"></div>
+              ) : (
+                '🗑️'
+              )}
             </button>
           )}
         </div>

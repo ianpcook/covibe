@@ -4,6 +4,7 @@
 
 import React, { useState } from 'react';
 import { PersonalityConfig } from '../types/personality';
+import './PersonalityDetailView.css';
 
 interface PersonalityDetailViewProps {
   config: PersonalityConfig;
@@ -11,6 +12,11 @@ interface PersonalityDetailViewProps {
   onEdit: (config: PersonalityConfig) => void;
   onDelete: (config: PersonalityConfig) => void;
   onToggleActive: (config: PersonalityConfig) => void;
+  operationInProgress?: {
+    type: 'delete' | 'toggle' | 'update' | null;
+    configId: string | null;
+    message: string;
+  };
 }
 
 const PersonalityDetailView: React.FC<PersonalityDetailViewProps> = ({
@@ -19,6 +25,7 @@ const PersonalityDetailView: React.FC<PersonalityDetailViewProps> = ({
   onEdit,
   onDelete,
   onToggleActive,
+  operationInProgress,
 }) => {
   const [showFullContext, setShowFullContext] = useState(false);
 
@@ -64,14 +71,24 @@ const PersonalityDetailView: React.FC<PersonalityDetailViewProps> = ({
   };
 
   const handleDelete = () => {
-    if (window.confirm(`Are you sure you want to delete "${config.profile.name}"?`)) {
-      onDelete(config);
-    }
+    onDelete(config);
   };
+
+  const isOperationInProgress = operationInProgress?.configId === config.id;
+  const isDisabled = isOperationInProgress;
 
   return (
     <div className="personality-detail-overlay">
       <div className="personality-detail-modal">
+        {isOperationInProgress && (
+          <div className="detail-operation-overlay">
+            <div className="operation-indicator">
+              <div className="operation-spinner"></div>
+              <span className="operation-message">{operationInProgress?.message}</span>
+            </div>
+          </div>
+        )}
+        
         <div className="detail-header">
           <div className="detail-title">
             <h2>{config.profile.name}</h2>
@@ -84,13 +101,19 @@ const PersonalityDetailView: React.FC<PersonalityDetailViewProps> = ({
               onClick={() => onToggleActive(config)}
               className={`btn btn-sm ${config.active ? 'btn-warning' : 'btn-success'}`}
               title={config.active ? 'Deactivate' : 'Activate'}
+              disabled={isDisabled}
             >
-              {config.active ? '⏸️ Deactivate' : '▶️ Activate'}
+              {isOperationInProgress && operationInProgress?.type === 'toggle' ? (
+                <div className="btn-spinner"></div>
+              ) : (
+                config.active ? '⏸️ Deactivate' : '▶️ Activate'
+              )}
             </button>
             <button
               onClick={() => onEdit(config)}
               className="btn btn-sm btn-secondary"
               title="Edit Configuration"
+              disabled={isDisabled}
             >
               ✏️ Edit
             </button>
@@ -98,13 +121,19 @@ const PersonalityDetailView: React.FC<PersonalityDetailViewProps> = ({
               onClick={handleDelete}
               className="btn btn-sm btn-danger"
               title="Delete Configuration"
+              disabled={isDisabled}
             >
-              🗑️ Delete
+              {isOperationInProgress && operationInProgress?.type === 'delete' ? (
+                <div className="btn-spinner"></div>
+              ) : (
+                '🗑️ Delete'
+              )}
             </button>
             <button
               onClick={onClose}
               className="btn btn-sm btn-secondary"
               title="Close"
+              disabled={isDisabled}
             >
               ✕
             </button>
@@ -168,21 +197,50 @@ const PersonalityDetailView: React.FC<PersonalityDetailViewProps> = ({
           )}
 
           <div className="detail-section">
-            <h3>IDE Integration</h3>
+            <h3>IDE Integration Status</h3>
             <div className="ide-integration-details">
               <div className="ide-status">
                 <div className="ide-info">
                   <span className="ide-icon">{getIdeTypeIcon(config.ide_type)}</span>
-                  <span className="ide-name">{config.ide_type}</span>
-                  <span className={`status-badge ${config.active ? 'active' : 'inactive'}`}>
-                    {config.active ? '✅ Active' : '⏸️ Inactive'}
-                  </span>
-                </div>
-                {config.file_path && (
-                  <div className="file-path">
-                    <strong>Config File:</strong> {config.file_path}
+                  <div className="ide-details">
+                    <span className="ide-name">{config.ide_type}</span>
+                    <span className={`status-badge ${config.active ? 'active' : 'inactive'}`}>
+                      {config.active ? '✅ Active & Integrated' : '⏸️ Inactive'}
+                    </span>
                   </div>
-                )}
+                </div>
+                
+                <div className="integration-info">
+                  {config.file_path && (
+                    <div className="file-path-info">
+                      <strong>Configuration File:</strong>
+                      <div className="file-path">{config.file_path}</div>
+                    </div>
+                  )}
+                  
+                  <div className="integration-status">
+                    <div className="status-item">
+                      <span className="status-label">File Status:</span>
+                      <span className={`status-value ${config.file_path ? 'success' : 'warning'}`}>
+                        {config.file_path ? '📄 File Created' : '⚠️ No File'}
+                      </span>
+                    </div>
+                    
+                    <div className="status-item">
+                      <span className="status-label">Integration:</span>
+                      <span className={`status-value ${config.active ? 'success' : 'inactive'}`}>
+                        {config.active ? '🔗 Connected' : '🔌 Disconnected'}
+                      </span>
+                    </div>
+                    
+                    <div className="status-item">
+                      <span className="status-label">Last Updated:</span>
+                      <span className="status-value">
+                        {formatDate(config.updated_at)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>

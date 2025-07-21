@@ -19,6 +19,11 @@ from ..models.core import (
 from .research import research_personality
 from .context_generation import generate_personality_context
 from ..integrations.ide_detection import detect_ides, get_primary_ide
+from ..utils.error_handling import (
+    SystemError, IntegrationError, error_handler, ErrorCategory,
+    RetryConfig, with_fallback, ErrorContext
+)
+from ..utils.monitoring import record_error, performance_monitor
 
 logger = logging.getLogger(__name__)
 
@@ -89,13 +94,19 @@ class PersonalityCache:
 _personality_cache = PersonalityCache()
 
 
+@error_handler(
+    category=ErrorCategory.SYSTEM,
+    operation="orchestrate_personality_request",
+    component="orchestration"
+)
+@performance_monitor("orchestrate_personality_request", "orchestration")
 async def orchestrate_personality_request(
     request: PersonalityRequest,
     project_path: Optional[Path] = None,
     use_cache: bool = True
 ) -> OrchestrationResult:
     """
-    Orchestrate complete personality configuration workflow.
+    Orchestrate complete personality configuration workflow with comprehensive error handling.
     
     Pipeline: research → context generation → IDE integration
     
@@ -109,36 +120,53 @@ async def orchestrate_personality_request(
     """
     logger.info(f"Starting orchestration for request: {request.id}")
     
+    context = ErrorContext(
+        operation="orchestrate_personality_request",
+        component="orchestration",
+        request_id=request.id,
+        additional_data={"description": request.description}
+    )
+    
     try:
-        # Stage 1: Personality Research
+        # Stage 1: Personality Research (with fallback mechanisms)
         research_result = await _execute_research_stage(
-            request.description, use_cache
+            request.description, use_cache, context
         )
         
         if not research_result.profiles:
+            error_detail = ErrorDetail(
+                code="RESEARCH_FAILED",
+                message="I couldn't find information about that personality",
+                suggestions=research_result.suggestions or [
+                    "Try a more specific personality description",
+                    "Check the spelling of the name",
+                    "Try a different personality or archetype"
+                ]
+            )
             return OrchestrationResult(
                 success=False,
-                error=ErrorDetail(
-                    code="RESEARCH_FAILED",
-                    message="No personality profiles found",
-                    suggestions=["Try a more specific personality description"]
-                ),
+                error=error_detail,
                 partial_results={"research": research_result}
             )
         
         # Use the first (best) profile found
         profile = research_result.profiles[0]
         
-        # Stage 2: Context Generation
-        context_result = await _execute_context_stage(profile)
+        # Stage 2: Context Generation (with error handling)
+        context_result = await _execute_context_stage(profile, context)
         
         if not context_result:
+            error_detail = ErrorDetail(
+                code="CONTEXT_GENERATION_FAILED",
+                message="I couldn't generate the personality context",
+                suggestions=[
+                    "Try again with the same personality",
+                    "Contact support if the problem persists"
+                ]
+            )
             return OrchestrationResult(
                 success=False,
-                error=ErrorDetail(
-                    code="CONTEXT_GENERATION_FAILED",
-                    message="Failed to generate personality context"
-                ),
+                error=error_detail,
                 partial_results={
                     "research": research_result,
                     "profile": profile
@@ -149,7 +177,7 @@ async def orchestrate_personality_request(
         config = None
         if project_path:
             config = await _execute_ide_integration_stage(
-                profile, context_result, project_path, request.id
+                profile, context_result, project_path, request.id, context
             )
         
         # Create final configuration
@@ -169,19 +197,28 @@ async def orchestrate_personality_request(
         return OrchestrationResult(success=True, config=config)
         
     except Exception as e:
-        logger.error(f"Orchestration failed for request {request.id}: {str(e)}")
+        # Log the error with context
+        record_error(e, "orchestration")
+        
+        error_detail = ErrorDetail(
+            code="ORCHESTRATION_ERROR",
+            message="An unexpected error occurred during personality configuration",
+            suggestions=[
+                "Try again in a few moments",
+                "Contact support if the problem persists"
+            ]
+        )
+        
         return OrchestrationResult(
             success=False,
-            error=ErrorDetail(
-                code="ORCHESTRATION_ERROR",
-                message=f"Unexpected error during orchestration: {str(e)}"
-            )
+            error=error_detail
         )
 
 
 async def _execute_research_stage(
     description: str, 
-    use_cache: bool
+    use_cache: bool,
+    context: ErrorContext
 ) -> ResearchResult:
     """Execute personality research stage with caching."""
     logger.info(f"Executing research stage for: {description}")
@@ -213,16 +250,17 @@ async def _execute_research_stage(
         )
 
 
-async def _execute_context_stage(profile: PersonalityProfile) -> Optional[str]:
+async def _execute_context_stage(profile: PersonalityProfile, context: ErrorContext) -> Optional[str]:
     """Execute context generation stage."""
     logger.info(f"Executing context stage for profile: {profile.name}")
     
     try:
-        context = generate_personality_context(profile)
-        return context
+        context_result = generate_personality_context(profile)
+        return context_result
         
     except Exception as e:
         logger.error(f"Context generation stage failed: {str(e)}")
+        record_error(e, "orchestration")
         return None
 
 
@@ -230,7 +268,8 @@ async def _execute_ide_integration_stage(
     profile: PersonalityProfile,
     context: str,
     project_path: Path,
-    request_id: str
+    request_id: str,
+    error_context: ErrorContext
 ) -> Optional[PersonalityConfig]:
     """Execute IDE integration stage."""
     logger.info(f"Executing IDE integration stage for: {project_path}")
@@ -286,7 +325,13 @@ async def orchestrate_research_only(
     """
     logger.info(f"Starting research-only orchestration for: {description}")
     
-    return await _execute_research_stage(description, use_cache)
+    context = ErrorContext(
+        operation="research_only",
+        component="orchestration",
+        additional_data={"description": description}
+    )
+    
+    return await _execute_research_stage(description, use_cache, context)
 
 
 async def orchestrate_batch_requests(

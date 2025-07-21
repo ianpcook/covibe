@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
 import HomePage from './pages/HomePage';
 import ConfigurationsPage from './pages/ConfigurationsPage';
+import ChatPage from './pages/ChatPage';
 import './App.css';
 
 const Navigation: React.FC = () => {
@@ -27,6 +28,12 @@ const Navigation: React.FC = () => {
         >
           Configurations
         </Link>
+        <Link 
+          to="/chat" 
+          className={`nav-link ${location.pathname === '/chat' ? 'active' : ''}`}
+        >
+          Chat
+        </Link>
       </div>
     </nav>
   );
@@ -41,6 +48,7 @@ const App: React.FC = () => {
           <Routes>
             <Route path="/" element={<HomePage />} />
             <Route path="/configurations" element={<ConfigurationsPage />} />
+            <Route path="/chat" element={<ChatPage />} />
             <Route path="*" element={
               <div className="not-found">
                 <h2>Page Not Found</h2>

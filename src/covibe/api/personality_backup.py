@@ -1,4 +1,4 @@
-"""Personality API routes and handlers - Fixed routing."""
+"""Personality API routes and handlers."""
 
 from fastapi import APIRouter, HTTPException, Request, status, Query
 from fastapi.encoders import jsonable_encoder
@@ -196,122 +196,6 @@ async def list_personality_configs(
             "LIST_ERROR",
             f"Failed to list personality configurations: {str(e)}",
             ["Contact support if the problem persists"]
-        )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=jsonable_encoder(error_response.dict())
-        )
-
-
-@router.post("/research", response_model=ResearchResponse, status_code=status.HTTP_200_OK)
-async def research_personality_endpoint(
-    request: Request,
-    research_request: ResearchOnlyRequest
-) -> ResearchResponse:
-    """
-    Research a personality without creating a full configuration.
-    """
-    try:
-        # Use orchestration system for research-only
-        result = await orchestrate_research_only(
-            research_request.description,
-            use_cache=research_request.use_cache
-        )
-        
-        return ResearchResponse(
-            query=result.query,
-            profiles_found=len(result.profiles),
-            profiles=[
-                {
-                    "id": p.id,
-                    "name": p.name,
-                    "type": p.type.value,
-                    "traits": [{"trait": t.trait, "intensity": t.intensity} for t in p.traits],
-                    "communication_style": {
-                        "tone": p.communication_style.tone,
-                        "formality": p.communication_style.formality.value,
-                        "verbosity": p.communication_style.verbosity.value,
-                        "technical_level": p.communication_style.technical_level.value
-                    },
-                    "mannerisms": p.mannerisms,
-                    "confidence": p.sources[0].confidence if p.sources else 0.0
-                }
-                for p in result.profiles
-            ],
-            confidence=result.confidence,
-            suggestions=result.suggestions,
-            errors=result.errors
-        )
-        
-    except Exception as e:
-        error_response = await create_error_response(
-            request,
-            "RESEARCH_ERROR",
-            f"Failed to research personality: {str(e)}",
-            ["Try again with different input", "Contact support if the problem persists"]
-        )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=jsonable_encoder(error_response.dict())
-        )
-
-
-@router.get("/ide/detect")
-async def detect_ide_environment(
-    request: Request,
-    project_path: str = Query(..., description="Project path to analyze for IDE detection")
-):
-    """
-    Detect IDE environment in the specified project path.
-    """
-    try:
-        path_obj = Path(project_path)
-        if not path_obj.exists():
-            error_response = await create_error_response(
-                request,
-                "PATH_NOT_FOUND",
-                f"Project path does not exist: {project_path}",
-                ["Check the project path", "Ensure the directory exists"]
-            )
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=jsonable_encoder(error_response.dict())
-            )
-        
-        # Detect IDEs
-        detected_ides = detect_ides(project_path)
-        primary_ide = get_primary_ide(detected_ides)
-        
-        return {
-            "project_path": project_path,
-            "detected_ides": [
-                {
-                    "name": ide.name,
-                    "type": ide.type,
-                    "config_path": ide.config_path,
-                    "confidence": ide.confidence,
-                    "markers": ide.markers
-                }
-                for ide in detected_ides
-            ],
-            "primary_ide": {
-                "name": primary_ide.name,
-                "type": primary_ide.type,
-                "config_path": primary_ide.config_path,
-                "confidence": primary_ide.confidence,
-                "markers": primary_ide.markers
-            } if primary_ide else None,
-            "total_detected": len(detected_ides)
-        }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        error_response = await create_error_response(
-            request,
-            "IDE_DETECTION_ERROR",
-            f"Failed to detect IDE environment: {str(e)}",
-            ["Check the project path", "Contact support if the problem persists"]
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -520,3 +404,175 @@ async def delete_personality_config(
     del _personality_configs[personality_id]
     
     # Return 204 No Content (no response body)
+
+
+@router.post("/research", response_model=ResearchResponse, status_code=status.HTTP_200_OK)
+async def research_personality_endpoint(
+    request: Request,
+    research_request: ResearchOnlyRequest
+) -> ResearchResponse:
+    """
+    Research a personality without creating a full configuration.
+    """
+    try:
+        # Use orchestration system for research-only
+        result = await orchestrate_research_only(
+            research_request.description,
+            use_cache=research_request.use_cache
+        )
+        
+        return ResearchResponse(
+            query=result.query,
+            profiles_found=len(result.profiles),
+            profiles=[
+                {
+                    "id": p.id,
+                    "name": p.name,
+                    "type": p.type.value,
+                    "traits": [{"trait": t.trait, "intensity": t.intensity} for t in p.traits],
+                    "communication_style": {
+                        "tone": p.communication_style.tone,
+                        "formality": p.communication_style.formality.value,
+                        "verbosity": p.communication_style.verbosity.value,
+                        "technical_level": p.communication_style.technical_level.value
+                    },
+                    "mannerisms": p.mannerisms,
+                    "confidence": p.sources[0].confidence if p.sources else 0.0
+                }
+                for p in result.profiles
+            ],
+            confidence=result.confidence,
+            suggestions=result.suggestions,
+            errors=result.errors
+        )
+        
+    except Exception as e:
+        error_response = await create_error_response(
+            request,
+            "RESEARCH_ERROR",
+            f"Failed to research personality: {str(e)}",
+            ["Try again with different input", "Contact support if the problem persists"]
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=jsonable_encoder(error_response.dict())
+        )
+
+
+# Additional API endpoints for IDE detection and cache management
+@router.get("/ide/detect")
+async def detect_ide_environment(
+    request: Request,
+    project_path: str = Query(..., description="Project path to analyze for IDE detection")
+):
+    """
+    Detect IDE environment in the specified project path.
+    """
+    try:
+        path_obj = Path(project_path)
+        if not path_obj.exists():
+            error_response = await create_error_response(
+                request,
+                "PATH_NOT_FOUND",
+                f"Project path does not exist: {project_path}",
+                ["Check the project path", "Ensure the directory exists"]
+            )
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=jsonable_encoder(error_response.dict())
+            )
+        
+        # Detect IDEs
+        detected_ides = detect_ides(project_path)
+        primary_ide = get_primary_ide(detected_ides)
+        
+        return {
+            "project_path": project_path,
+            "detected_ides": [
+                {
+                    "name": ide.name,
+                    "type": ide.type,
+                    "config_path": ide.config_path,
+                    "confidence": ide.confidence,
+                    "markers": ide.markers
+                }
+                for ide in detected_ides
+            ],
+            "primary_ide": {
+                "name": primary_ide.name,
+                "type": primary_ide.type,
+                "config_path": primary_ide.config_path,
+                "confidence": primary_ide.confidence,
+                "markers": primary_ide.markers
+            } if primary_ide else None,
+            "total_detected": len(detected_ides)
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        error_response = await create_error_response(
+            request,
+            "IDE_DETECTION_ERROR",
+            f"Failed to detect IDE environment: {str(e)}",
+            ["Check the project path", "Contact support if the problem persists"]
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=jsonable_encoder(error_response.dict())
+        )
+
+
+@router.get("/cache/stats")
+async def get_cache_statistics(request: Request):
+    """
+    Get personality cache statistics.
+    """
+    try:
+        stats = get_cache_stats()
+        return {
+            "cache_stats": stats,
+            "timestamp": datetime.now()
+        }
+        
+    except Exception as e:
+        error_response = await create_error_response(
+            request,
+            "CACHE_STATS_ERROR",
+            f"Failed to get cache statistics: {str(e)}",
+            ["Contact support if the problem persists"]
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=jsonable_encoder(error_response.dict())
+        )
+
+
+@router.delete("/cache")
+async def clear_personality_cache(
+    request: Request,
+    clear_all: bool = Query(default=False, description="Whether to clear all entries or just expired ones")
+):
+    """
+    Clear personality cache entries.
+    """
+    try:
+        cleared_count = await clear_cache(clear_all=clear_all)
+        
+        return {
+            "cleared_entries": cleared_count,
+            "clear_type": "all" if clear_all else "expired_only",
+            "timestamp": datetime.now()
+        }
+        
+    except Exception as e:
+        error_response = await create_error_response(
+            request,
+            "CACHE_CLEAR_ERROR",
+            f"Failed to clear cache: {str(e)}",
+            ["Contact support if the problem persists"]
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=jsonable_encoder(error_response.dict())
+        )
