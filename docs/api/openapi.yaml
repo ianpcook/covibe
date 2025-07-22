@@ -9,10 +9,12 @@ info:
     
     ## Features
     - Multiple input methods (web, API, chat)
-    - Automatic personality research
+    - **LLM-enhanced personality research** with multiple provider support
+    - Automatic personality research with intelligent fallback mechanisms
     - IDE integration (Cursor, Claude, Windsurf)
     - Configuration persistence and versioning
     - Real-time chat interface
+    - Advanced prompt engineering and response validation
     
     ## Authentication
     API key authentication is required for most endpoints. Include your API key in the
@@ -73,8 +75,15 @@ paths:
       summary: Create personality configuration
       description: |
         Create a new personality configuration by providing a personality description.
-        The system will research the personality, generate appropriate context, and
-        integrate with the detected IDE environment.
+        The system will research the personality using LLM-enhanced analysis when available,
+        falling back to traditional research methods if needed. Generated context is optimized
+        for the detected IDE environment.
+        
+        **LLM Features:**
+        - Multi-provider support (OpenAI, Anthropic, local models)
+        - Intelligent prompt engineering for better personality analysis
+        - Response validation and retry mechanisms
+        - Automatic fallback to traditional research on LLM failures
       operationId: createPersonalityConfig
       requestBody:
         required: true
@@ -90,11 +99,24 @@ paths:
                   user_id: "user123"
                   project_path: "/path/to/project"
                   source: "api"
+                  use_llm: true
+                  llm_provider: "openai"
               archetype:
                 summary: Character archetype
                 value:
                   description: "friendly mentor who explains things clearly"
                   project_path: "/path/to/project"
+                  use_llm: true
+                  llm_provider: "anthropic"
+              freeform:
+                summary: Free-form personality description (LLM-enhanced)
+                value:
+                  description: "A brilliant but arrogant surgeon who becomes a mystical protector of reality"
+                  user_id: "user456"
+                  project_path: "/path/to/project"
+                  source: "api"
+                  use_llm: true
+                  llm_provider: "openai"
       responses:
         '201':
           description: Personality configuration created successfully
@@ -172,6 +194,13 @@ paths:
       description: |
         Research a personality without creating a full configuration.
         Useful for exploring personality options before committing to a configuration.
+        
+        **LLM-Enhanced Research:**
+        - Supports free-form personality descriptions
+        - Multiple LLM provider options with automatic fallback
+        - Structured response validation and confidence scoring
+        - Response caching for improved performance
+        - Traditional research fallback for reliability
       operationId: researchPersonality
       requestBody:
         required: true
@@ -179,6 +208,20 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/ResearchOnlyRequest'
+            examples:
+              llm_research:
+                summary: LLM-enhanced research
+                value:
+                  description: "A complex character with both analytical and creative traits"
+                  use_llm: true
+                  llm_provider: "openai"
+                  use_cache: true
+              traditional_research:
+                summary: Traditional research
+                value:
+                  description: "Sherlock Holmes"
+                  use_llm: false
+                  use_cache: true
       responses:
         '200':
           description: Personality research results
@@ -186,6 +229,23 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ResearchResponse'
+
+  /api/personality/llm/status:
+    get:
+      tags:
+        - llm
+      summary: Get LLM provider status
+      description: |
+        Check the status and availability of configured LLM providers.
+        Useful for monitoring and debugging LLM integration.
+      operationId: getLLMProviderStatus
+      responses:
+        '200':
+          description: LLM provider status information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LLMStatusResponse'
 
   /api/personality/ide/detect:
     get:
@@ -329,6 +389,15 @@ components:
           example: "/path/to/project"
         source:
           $ref: '#/components/schemas/SourceType'
+        use_llm:
+          type: boolean
+          default: true
+          description: Enable LLM-enhanced personality research
+        llm_provider:
+          type: string
+          enum: [openai, anthropic, local]
+          default: openai
+          description: Preferred LLM provider for research
 
     PersonalityUpdateRequest:
       type: object
@@ -357,6 +426,15 @@ components:
           type: boolean
           default: true
           description: Whether to use cached results
+        use_llm:
+          type: boolean
+          default: true
+          description: Enable LLM-enhanced research
+        llm_provider:
+          type: string
+          enum: [openai, anthropic, local]
+          default: openai
+          description: Preferred LLM provider
 
     PersonalityConfigResponse:
       type: object
@@ -411,6 +489,16 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ResearchSource'
+        llm_enhanced:
+          type: boolean
+          description: Whether this profile was enhanced using LLM analysis
+          example: true
+        confidence_score:
+          type: number
+          minimum: 0.0
+          maximum: 1.0
+          description: LLM confidence score for this personality analysis
+          example: 0.95
 
     PersonalityTrait:
       type: object
@@ -449,7 +537,8 @@ components:
       properties:
         type:
           type: string
-          example: "wikipedia"
+          enum: [wikipedia, imdb, llm_openai, llm_anthropic, llm_local, archetype, manual]
+          example: "llm_openai"
         url:
           type: string
           format: uri
@@ -475,7 +564,7 @@ components:
         profiles:
           type: array
           items:
-            type: object
+            $ref: '#/components/schemas/PersonalityProfile'
         confidence:
           type: number
           minimum: 0.0
@@ -488,6 +577,108 @@ components:
           type: array
           items:
             type: string
+        llm_used:
+          type: boolean
+          description: Whether LLM was used for research
+          example: true
+        llm_provider:
+          type: string
+          description: LLM provider used (if any)
+          example: "openai"
+        processing_time_ms:
+          type: integer
+          description: Total processing time in milliseconds
+          example: 1250
+        cache_hit:
+          type: boolean
+          description: Whether result was served from cache
+          example: false
+
+    LLMStatusResponse:
+      type: object
+      properties:
+        llm_research_enabled:
+          type: boolean
+          description: Whether LLM research is enabled globally
+          example: true
+        preferred_provider:
+          type: string
+          description: Currently preferred LLM provider
+          example: "openai"
+        providers:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/LLMProviderInfo'
+          description: Status of each configured LLM provider
+        cache_status:
+          $ref: '#/components/schemas/CacheStatus'
+        timestamp:
+          type: string
+          format: date-time
+          description: Timestamp of this status check
+
+    LLMProviderInfo:
+      type: object
+      properties:
+        name:
+          type: string
+          example: "OpenAI"
+        available:
+          type: boolean
+          description: Whether the provider is currently available
+          example: true
+        connected:
+          type: boolean
+          description: Whether connection to provider was successful
+          example: true
+        models:
+          type: array
+          items:
+            type: string
+          description: Available models for this provider
+          example: ["gpt-4", "gpt-3.5-turbo"]
+        default_model:
+          type: string
+          description: Default model used for this provider
+          example: "gpt-4"
+        rate_limit_status:
+          type: object
+          properties:
+            remaining_requests:
+              type: integer
+              example: 45
+            reset_time:
+              type: string
+              format: date-time
+        last_error:
+          type: string
+          description: Last error message (if any)
+          example: null
+        response_time_ms:
+          type: integer
+          description: Average response time in milliseconds
+          example: 1200
+
+    CacheStatus:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+          example: true
+        hit_rate:
+          type: number
+          minimum: 0.0
+          maximum: 1.0
+          description: Cache hit rate (0.0 to 1.0)
+          example: 0.75
+        total_entries:
+          type: integer
+          description: Total number of cached entries
+          example: 142
+        memory_usage_mb:
+          type: number
+          description: Cache memory usage in MB
+          example: 8.5
 
     IdeDetectionResponse:
       type: object

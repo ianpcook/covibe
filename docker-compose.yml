@@ -6,13 +6,36 @@ services:
     container_name: covibe-backend
     ports:
       - "8000:8000"
+      - "9090:9090"  # Metrics port
     environment:
       - ENVIRONMENT=production
       - LOG_LEVEL=info
       - DATABASE_URL=sqlite:///app/data/covibe.db
+      # LLM Configuration
+      - LLM_RESEARCH_ENABLED=true
+      - DEFAULT_LLM_PROVIDER=openai
+      - ENABLE_LLM_CACHING=true
+      - REDIS_URL=redis://redis:6379
+      # Security
+      - ENABLE_INPUT_SANITIZATION=true
+      - ENABLE_OUTPUT_VALIDATION=true
+      - MAX_DESCRIPTION_LENGTH=2000
+      # Performance
+      - MAX_CONCURRENT_LLM_REQUESTS=10
+      - CACHE_TTL_HOURS=24
+      # API Keys (set via .env file)
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
+      # LLM configuration mounting
+      - ./config/llm:/app/config/llm:ro
+      - ./config/prompts:/app/config/prompts:ro
+      - llm-cache:/app/cache
+    depends_on:
+      redis:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -46,19 +69,62 @@ services:
   #   networks:
   #     - covibe-network
 
-  # Optional: Redis for caching
+  # Redis for LLM response caching
   redis:
     image: redis:7-alpine
     container_name: covibe-redis
     ports:
       - "6379:6379"
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+    command: >
+      redis-server
+      --appendonly yes
+      --requirepass "${REDIS_PASSWORD:-}"
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
     volumes:
       - redis-data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
       interval: 30s
       timeout: 10s
       retries: 3
+    restart: unless-stopped
+    networks:
+      - covibe-network
+
+  # Optional: Prometheus for metrics collection
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: covibe-prometheus
+    ports:
+      - "9091:9090"
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=30d'
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    restart: unless-stopped
+    networks:
+      - covibe-network
+
+  # Optional: Grafana for visualization
+  grafana:
+    image: grafana/grafana:latest
+    container_name: covibe-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./config/grafana:/etc/grafana/provisioning:ro
     restart: unless-stopped
     networks:
       - covibe-network
@@ -69,3 +135,6 @@ networks:
 
 volumes:
   redis-data:
+  llm-cache:
+  prometheus-data:
+  grafana-data:

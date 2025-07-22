@@ -3,17 +3,46 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.backend
-    container_name: covibe-backend
+    container_name: covibe-backend-dev
     ports:
       - "8000:8000"
+      - "9090:9090"  # Metrics port
     environment:
       - ENVIRONMENT=development
-      - LOG_LEVEL=debug
-      - DATABASE_URL=sqlite:///app/data/covibe.db
+      - LOG_LEVEL=DEBUG
+      - DATABASE_URL=sqlite:///app/data/covibe_dev.db
+      # LLM Development Configuration
+      - LLM_RESEARCH_ENABLED=true
+      - DEFAULT_LLM_PROVIDER=openai
+      - ENABLE_LLM_CACHING=true
+      - REDIS_URL=redis://redis:6379
+      # Debug settings
+      - LOG_LLM_REQUESTS=true
+      - LOG_LLM_RESPONSES=true  # OK for development
+      - ENABLE_DEBUG_MODE=true
+      # Lower limits for development
+      - DAILY_BUDGET_USD=10.0
+      - MAX_CONCURRENT_LLM_REQUESTS=5
+      - CACHE_TTL_HOURS=1  # Shorter cache for testing
+      # Security (relaxed for development)
+      - ENABLE_INPUT_SANITIZATION=true
+      - ENABLE_OUTPUT_VALIDATION=true
+      - MAX_DESCRIPTION_LENGTH=5000  # Higher for testing
+      # API Keys from environment
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - LOCAL_LLM_BASE_URL=${LOCAL_LLM_BASE_URL:-http://ollama:11434}
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
-      - ./src:/app/src  # Mount source for development
+      - ./src:/app/src:rw  # Mount source for development
+      # LLM configuration mounting
+      - ./config/llm:/app/config/llm:rw
+      - ./config/prompts:/app/config/prompts:rw
+      - dev-cache:/app/cache
+    depends_on:
+      redis:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -27,13 +56,20 @@ services:
   # For development, we'll run frontend separately with npm run dev
   # This avoids the build issues while developing
 
+  # Redis for LLM response caching
   redis:
     image: redis:7-alpine
-    container_name: covibe-redis
+    container_name: covibe-redis-dev
     ports:
       - "6379:6379"
+    command: >
+      redis-server
+      --appendonly yes
+      --maxmemory 128mb
+      --maxmemory-policy allkeys-lru
+      --save 60 1000
     volumes:
-      - redis-data:/data
+      - redis-dev-data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 30s
@@ -43,9 +79,68 @@ services:
     networks:
       - covibe-network
 
+  # Optional: Local LLM service (Ollama) for development
+  ollama:
+    image: ollama/ollama:latest
+    container_name: covibe-ollama-dev
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+      - OLLAMA_MODELS=/root/.ollama/models
+    # Pull lightweight models for development
+    command: >
+      sh -c "
+        ollama serve &
+        sleep 15 &&
+        ollama pull llama2:7b &&
+        ollama pull mistral:7b &&
+        wait
+      "
+    restart: unless-stopped
+    networks:
+      - covibe-network
+
+  # Development helper: Redis GUI
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: covibe-redis-gui-dev
+    ports:
+      - "8081:8081"
+    environment:
+      - REDIS_HOSTS=local:redis:6379
+    depends_on:
+      - redis
+    restart: unless-stopped
+    networks:
+      - covibe-network
+
+  # Development metrics (optional)
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: covibe-prometheus-dev
+    ports:
+      - "9091:9090"
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.enable-lifecycle'
+      - '--storage.tsdb.retention.time=7d'
+    volumes:
+      - ./config/prometheus.dev.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-dev-data:/prometheus
+    restart: unless-stopped
+    networks:
+      - covibe-network
+
 networks:
   covibe-network:
     driver: bridge
 
 volumes:
-  redis-data:
+  redis-dev-data:
+  dev-cache:
+  ollama-data:
+  prometheus-dev-data:

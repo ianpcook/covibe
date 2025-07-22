@@ -1,4 +1,4 @@
-# Backend Dockerfile
+# Backend Dockerfile with LLM Integration Support
 FROM python:3.11-slim
 
 WORKDIR /app
@@ -7,6 +7,8 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y \
     gcc \
     curl \
+    git \
+    ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better caching
@@ -15,22 +17,45 @@ COPY pyproject.toml uv.lock ./
 # Install uv for faster dependency management
 RUN pip install uv
 
-# Install dependencies
+# Install dependencies (including LLM packages)
 RUN uv sync --frozen
+
+# Create directories for LLM configuration and caching
+RUN mkdir -p /app/config/llm \
+             /app/config/prompts \
+             /app/cache/llm \
+             /app/logs
 
 # Copy source code
 COPY src/ ./src/
 COPY main.py ./
 
-# Create non-root user
-RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
+# Copy default LLM configurations
+COPY config/llm/ ./config/llm/
+COPY config/prompts/ ./config/prompts/
+
+# Create non-root user and set permissions
+RUN useradd -m -u 1000 appuser && \
+    chown -R appuser:appuser /app && \
+    chmod -R 755 /app/config && \
+    chmod -R 755 /app/cache && \
+    chmod -R 755 /app/logs
+
 USER appuser
 
-# Expose port
-EXPOSE 8000
+# Expose ports
+EXPOSE 8000 9090
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+# Environment variables with defaults
+ENV LLM_CONFIG_PATH="/app/config/llm" \
+    PROMPT_CONFIG_PATH="/app/config/prompts" \
+    CACHE_DIR="/app/cache" \
+    LOG_DIR="/app/logs" \
+    PYTHONPATH="/app" \
+    PYTHONUNBUFFERED=1
+
+# Health check (includes LLM provider status)
+HEALTHCHECK --interval=30s --timeout=15s --start-period=10s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
 # Run the application
