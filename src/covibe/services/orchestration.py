@@ -25,7 +25,7 @@ from .input_processing import (
 )
 from ..integrations.ide_detection import detect_ides, get_primary_ide
 from ..utils.error_handling import (
-    SystemError, IntegrationError, error_handler, ErrorCategory,
+    SystemError, IntegrationError, ResearchError, error_handler, ErrorCategory,
     RetryConfig, with_fallback, ErrorContext
 )
 from ..utils.monitoring import record_error, performance_monitor
@@ -378,6 +378,23 @@ async def orchestrate_personality_request(
         logger.info(f"Successfully orchestrated request: {request.id}")
         return OrchestrationResult(success=True, config=config)
         
+    except ResearchError as e:
+        # Handle research-specific errors with proper messaging
+        error_detail = ErrorDetail(
+            code="RESEARCH_FAILED",
+            message=str(e),
+            suggestions=e.suggestions or [
+                "The AI research service is experiencing issues",
+                "Please try again in a few minutes",
+                "If the problem persists, contact support"
+            ]
+        )
+        
+        return OrchestrationResult(
+            success=False,
+            error=error_detail
+        )
+        
     except Exception as e:
         # Log the error with context
         from ..utils.error_handling import PersonalitySystemError, ErrorCategory, ErrorSeverity
@@ -385,7 +402,7 @@ async def orchestrate_personality_request(
             message=str(e),
             category=ErrorCategory.SYSTEM,
             severity=ErrorSeverity.HIGH,
-            context=error_context
+            context=context
         )
         record_error(wrapped_error, "orchestration")
         
@@ -428,6 +445,9 @@ async def _execute_research_stage(
         
         return result
         
+    except ResearchError:
+        # Re-raise ResearchErrors to preserve specific error messages
+        raise
     except Exception as e:
         logger.error(f"Research stage failed: {str(e)}")
         return ResearchResult(

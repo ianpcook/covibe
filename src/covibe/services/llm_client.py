@@ -365,7 +365,7 @@ def create_client_factory(provider: str, **kwargs) -> LLMClient:
     
     elif provider == "anthropic":
         api_key = kwargs.get("api_key")
-        model = kwargs.get("model", "claude-3-sonnet-20240229")
+        model = kwargs.get("model", "claude-3-5-sonnet-20241022")
         if not api_key:
             raise ValueError("Anthropic API key is required")
         return AnthropicClient(api_key, model)

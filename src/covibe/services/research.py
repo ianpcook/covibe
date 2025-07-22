@@ -3,6 +3,7 @@
 import asyncio
 import httpx
 import json
+import logging
 import os
 from typing import List, Dict, Optional, Tuple, Any
 from datetime import datetime
@@ -47,6 +48,8 @@ from .prompt_manager import (
     render_prompt,
     get_default_prompt_config
 )
+
+logger = logging.getLogger(__name__)
 from .llm_cache import (
     CacheClient,
     CachedLLMResponse,
@@ -152,6 +155,17 @@ def get_character_data(query: str) -> Tuple[Optional[Dict[str, Any]], float]:
                 "verbosity": "moderate"
             },
             "mannerisms": ["speaks with conviction", "emphasizes values", "leads by example"]
+        },
+        "han solo": {
+            "name": "Han Solo",
+            "description": "Charming smuggler, roguish, independent, and witty",
+            "traits": ["roguish", "charming", "independent", "confident", "sarcastic"],
+            "communication_style": {
+                "tone": "casual",
+                "formality": "informal",
+                "verbosity": "moderate"
+            },
+            "mannerisms": ["uses sarcasm", "makes cocky remarks", "speaks confidently"]
         }
     }
     
@@ -736,7 +750,7 @@ async def research_personality_with_llm(
         )
 
 
-async def fallback_research_personality(description: str) -> ResearchResult:
+async def _deprecated_fallback_research_personality(description: str) -> ResearchResult:
     """Fallback to existing research methods when LLM fails.
     
     This uses the existing character data, archetype data, and Wikipedia research.
@@ -857,6 +871,7 @@ async def research_personality(
     Returns:
         ResearchResult with personality profiles and metadata
     """
+    logger.info(f"research_personality called with: description={description}, use_llm={use_llm}, provider={llm_provider}")
     
     # Input validation
     if not description or not description.strip():
@@ -880,6 +895,7 @@ async def research_personality(
     try:
         # Primary research path: Use LLM if enabled
         if use_llm:
+            logger.info(f"Starting LLM research for: {description}")
             try:
                 # Load prompt configuration
                 prompt_config_path = Path("config/prompts/personality_analysis.yaml")
@@ -889,61 +905,68 @@ async def research_personality(
                     # Use default prompt if config file doesn't exist
                     prompt_config = get_default_prompt_config()
                 
-                # Create LLM client based on provider
-                llm_client = None
-                if not llm_provider:
-                    # Try to get from environment or use default
-                    if os.getenv("OPENAI_API_KEY"):
-                        llm_provider = "openai"
-                    elif os.getenv("ANTHROPIC_API_KEY"):
-                        llm_provider = "anthropic"
-                    else:
-                        llm_provider = "local"
+                # Try LLM providers with fallback logic
+                primary_provider = llm_provider or os.getenv("DEFAULT_LLM_PROVIDER", "openai")
+                fallback_providers = os.getenv("FALLBACK_LLM_PROVIDERS", "anthropic,local").split(",")
+                all_providers = [primary_provider] + [p.strip() for p in fallback_providers if p.strip() != primary_provider]
                 
-                if llm_provider == "openai":
-                    llm_client = await create_openai_client(
-                        api_key=os.getenv("OPENAI_API_KEY"),
-                        model=prompt_config.model or "gpt-4"
-                    )
-                elif llm_provider == "anthropic":
-                    llm_client = await create_anthropic_client(
-                        api_key=os.getenv("ANTHROPIC_API_KEY"),
-                        model="claude-3-sonnet-20240229"
-                    )
-                elif llm_provider == "local":
-                    llm_client = await create_local_client(
-                        endpoint=os.getenv("LOCAL_LLM_ENDPOINT", "http://localhost:11434"),
-                        model="llama2"
-                    )
-                
-                if llm_client:
-                    # Create cache client if enabled
-                    cache_client = None
-                    if cache_enabled:
-                        cache_client = InMemoryCache(max_size=1000)
-                        await cache_client.start()
-                    
+                last_error = None
+                for provider in all_providers:
                     try:
-                        # Try LLM research with retry
-                        llm_result = await with_retry(
-                            research_personality_with_llm,
-                            description,
-                            llm_client,
-                            prompt_config,
-                            cache_client,
-                            retry_config=RetryConfig(max_attempts=2, base_delay=2.0),
-                            retryable_exceptions=(NetworkError, RateLimitError),
-                            context=context
-                        )
+                        # Create client for this provider
+                        llm_client = None
+                        if provider == "openai" and os.getenv("OPENAI_API_KEY"):
+                            llm_client = await create_openai_client(
+                                api_key=os.getenv("OPENAI_API_KEY"),
+                                model=os.getenv("OPENAI_DEFAULT_MODEL", "gpt-4")
+                            )
+                        elif provider == "anthropic" and os.getenv("ANTHROPIC_API_KEY"):
+                            llm_client = await create_anthropic_client(
+                                api_key=os.getenv("ANTHROPIC_API_KEY"),
+                                model=os.getenv("ANTHROPIC_DEFAULT_MODEL", "claude-3-5-sonnet-20241022")
+                            )
+                        elif provider == "local":
+                            llm_client = await create_local_client(
+                                endpoint=os.getenv("LOCAL_LLM_BASE_URL", "http://localhost:11434"),
+                                model=os.getenv("LOCAL_DEFAULT_MODEL", "llama2:7b")
+                            )
                         
-                        if llm_result.profiles:
-                            # LLM research successful
-                            return llm_result
+                        if not llm_client:
+                            logger.warning(f"Could not create {provider} client (missing credentials?)")
+                            continue
+                            
+                        # Try research with this provider
+                        cache_client = None
+                        try:
+                            if cache_enabled:
+                                cache_client = InMemoryCache(max_size=1000)
+                                await cache_client.start()
+                            
+                            logger.info(f"Attempting LLM research with provider: {provider}")
+                            llm_result = await research_personality_with_llm(
+                                description,
+                                llm_client,
+                                prompt_config,
+                                cache_client
+                            )
+                            
+                            if llm_result.profiles:
+                                logger.info(f"LLM research succeeded with provider: {provider}")
+                                return llm_result
+                                
+                        finally:
+                            # Clean up cache client
+                            if cache_client and hasattr(cache_client, 'stop'):
+                                await cache_client.stop()
                         
-                    finally:
-                        # Clean up cache client
-                        if cache_client and hasattr(cache_client, 'stop'):
-                            await cache_client.stop()
+                    except (LLMRateLimitError, LLMTimeoutError, LLMConnectionError) as e:
+                        logger.warning(f"Provider {provider} failed with {type(e).__name__}: {str(e)}, trying next provider...")
+                        last_error = e
+                        continue
+                    except Exception as e:
+                        logger.warning(f"Provider {provider} failed with unexpected error: {str(e)}")
+                        last_error = e
+                        continue
                             
             except Exception as e:
                 # Log LLM errors but don't fail - fall back to traditional research
@@ -956,24 +979,15 @@ async def research_personality(
                 record_error(wrapped_error, "research")
                 errors.append(f"LLM research failed: {str(e)}")
         
-        # Fallback to traditional research methods
-        fallback_result = await fallback_research_personality(description)
-        
-        # Merge errors from LLM attempt with fallback result
-        fallback_result.errors.extend(errors)
-        
-        # If no results from any method, raise error
-        if not fallback_result.profiles:
-            raise ResearchError(
-                f"No personality information found for '{description}'",
-                suggestions=fallback_result.suggestions or [
-                    "Try using specific character names like 'Tony Stark', 'Sherlock Holmes', or 'Einstein'",
-                    "Try archetype descriptions like 'genius', 'mentor', 'drill sergeant', or 'robot'",
-                    "Include more details in your description"
-                ]
-            )
-        
-        return fallback_result
+        # Raise error when LLM research fails - no fallback to hardcoded characters
+        raise ResearchError(
+            f"Unable to research personality for '{description}' due to LLM service issues",
+            suggestions=[
+                "The AI research service is currently experiencing issues (rate limits or connection problems)",
+                "Please try again in a few minutes",
+                "If the problem persists, contact support"
+            ]
+        )
         
     except (InputValidationError, ResearchError):
         # Re-raise our custom errors
