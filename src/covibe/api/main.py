@@ -7,7 +7,13 @@ from fastapi.encoders import jsonable_encoder
 from contextlib import asynccontextmanager
 import logging
 from datetime import datetime
+from dotenv import load_dotenv
+import os
 from ..models.core import ErrorResponse, ErrorDetail
+
+# Load environment variables from .env file
+from pathlib import Path
+load_dotenv(Path(__file__).parent.parent.parent.parent / ".env")
 
 
 # Configure logging

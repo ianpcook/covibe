@@ -252,8 +252,14 @@ async def orchestrate_personality_request_enhanced(
         )
         
     except Exception as e:
-        # Log the error with context
-        record_error(e, "orchestration")
+        # Log the error with context  
+        from ..utils.error_handling import PersonalitySystemError, ErrorCategory, ErrorSeverity
+        wrapped_error = PersonalitySystemError(
+            message=str(e),
+            category=ErrorCategory.SYSTEM,
+            severity=ErrorSeverity.HIGH
+        )
+        record_error(wrapped_error, "orchestration")
         
         error_detail = ErrorDetail(
             code="ORCHESTRATION_ERROR",
@@ -374,7 +380,14 @@ async def orchestrate_personality_request(
         
     except Exception as e:
         # Log the error with context
-        record_error(e, "orchestration")
+        from ..utils.error_handling import PersonalitySystemError, ErrorCategory, ErrorSeverity
+        wrapped_error = PersonalitySystemError(
+            message=str(e),
+            category=ErrorCategory.SYSTEM,
+            severity=ErrorSeverity.HIGH,
+            context=error_context
+        )
+        record_error(wrapped_error, "orchestration")
         
         error_detail = ErrorDetail(
             code="ORCHESTRATION_ERROR",
@@ -436,7 +449,13 @@ async def _execute_context_stage(profile: PersonalityProfile, context: ErrorCont
         
     except Exception as e:
         logger.error(f"Context generation stage failed: {str(e)}")
-        record_error(e, "orchestration")
+        from ..utils.error_handling import PersonalitySystemError, ErrorCategory, ErrorSeverity
+        wrapped_error = PersonalitySystemError(
+            message=str(e),
+            category=ErrorCategory.SYSTEM,
+            severity=ErrorSeverity.MEDIUM
+        )
+        record_error(wrapped_error, "orchestration")
         return None
 
 

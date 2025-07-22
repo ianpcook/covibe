@@ -1,6 +1,7 @@
 providers:
   openai:
     api_key_env: "OPENAI_API_KEY"
+    organization_env: "OPENAI_ORG_ID"
     base_url: "https://api.openai.com/v1"
     models:
       - "gpt-4"

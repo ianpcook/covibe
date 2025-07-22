@@ -10,9 +10,10 @@ from ..models.database import DatabaseConfig
 async def initialize_database(database_url: Optional[str] = None) -> DatabaseConfig:
     """Initialize database with tables and return config."""
     if not database_url:
-        # Default to SQLite in project root
-        db_path = Path("personality_system.db")
-        database_url = f"sqlite+aiosqlite:///{db_path.absolute()}"
+        database_url = os.getenv(
+            "DATABASE_URL",
+            "sqlite+aiosqlite:///./personality_system.db"
+        )
     
     db_config = DatabaseConfig(database_url)
     await db_config.create_tables()

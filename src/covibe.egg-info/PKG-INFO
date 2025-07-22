@@ -9,4 +9,340 @@ Requires-Dist: httpx>=0.28.1
 Requires-Dist: jinja2>=3.1.6
 Requires-Dist: pydantic>=2.11.7
 Requires-Dist: python-multipart>=0.0.20
-Requires-Dist: uvicorn>=0.35.0
+Requires-Dist: uvicorn[standard]>=0.35.0
+Requires-Dist: websockets>=14.1
+Requires-Dist: sqlalchemy>=2.0.0
+Requires-Dist: aiosqlite>=0.20.0
+Requires-Dist: alembic>=1.13.0
+Requires-Dist: greenlet>=3.0.0
+Requires-Dist: openai>=1.0.0
+Requires-Dist: anthropic>=0.8.0
+Requires-Dist: tiktoken>=0.5.0
+Requires-Dist: pyyaml>=6.0.0
+
+# Covibe - Agent Personality System
+
+[![CI/CD Pipeline](https://github.com/covibe/covibe/workflows/CI/CD%20Pipeline/badge.svg)](https://github.com/covibe/covibe/actions)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![Docker](https://img.shields.io/badge/docker-ready-blue.svg)](https://hub.docker.com/r/covibe/backend)
+
+Transform your coding experience by adding personality to your AI coding assistants. Whether you want your agent to respond like Tony Stark, Yoda, or a patient mentor, Covibe makes it possible.
+
+## ✨ Features
+
+- **🎭 Multiple Personality Types**: Celebrities, fictional characters, archetypes, and custom personalities
+- **🔍 Intelligent Research**: Automatic personality research from multiple sources
+- **🛠️ IDE Integration**: Native support for Cursor, Claude, Windsurf, and more
+- **💬 Multiple Interfaces**: Web UI, REST API, and conversational chat
+- **💾 Persistent Storage**: Save and manage multiple personality profiles
+- **🔄 Real-time Updates**: Live personality switching and refinement
+- **📊 Monitoring**: Built-in metrics and observability
+
+## 🚀 Quick Start
+
+### Docker (Recommended)
+
+```bash
+# Clone the repository
+git clone https://github.com/covibe/covibe.git
+cd covibe
+
+# Start with Docker Compose
+docker-compose up -d
+
+# Access the web interface
+open http://localhost:80
+```
+
+### Local Development
+
+```bash
+# Install dependencies
+pip install uv
+uv sync
+
+# Start backend
+uv run uvicorn main:app --reload
+
+# Start frontend (in another terminal)
+cd web && npm install && npm run dev
+```
+
+## 🎯 Usage Examples
+
+### Web Interface
+
+1. Open `http://localhost:8000` in your browser
+2. Enter a personality description: "Tony Stark from Iron Man"
+3. Select your project directory
+4. Click "Generate Configuration"
+5. Your coding agent now has personality!
+
+### API Usage
+
+```bash
+# Create a personality configuration
+curl -X POST http://localhost:8000/api/personality \
+  -H "Content-Type: application/json" \
+  -d '{
+    "description": "Sherlock Holmes",
+    "project_path": "/path/to/your/project"
+  }'
+
+# List configurations
+curl http://localhost:8000/api/personality/configs
+
+# Research without creating config
+curl -X POST http://localhost:8000/api/personality/research \
+  -H "Content-Type: application/json" \
+  -d '{"description": "Albert Einstein"}'
+```
+
+### Chat Interface
+
+```
+User: I want my coding agent to be like Yoda
+Covibe: Wise choice, you have made! Create a Yoda personality, I will. 
+        Patient and insightful, your agent will become...
+
+User: Make him less cryptic and more direct
+Covibe: Adjust the wisdom I will, but clearer in speech, Yoda shall be...
+```
+
+## 🏗️ Architecture
+
+```
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   Web Interface │    │    REST API     │    │  Chat Interface │
+└─────────┬───────┘    └─────────┬───────┘    └─────────┬───────┘
+          │                      │                      │
+          └──────────────────────┼──────────────────────┘
+                                 │
+                    ┌─────────────┴─────────────┐
+                    │  Request Orchestrator     │
+                    └─────────────┬─────────────┘
+                                  │
+          ┌───────────────────────┼───────────────────────┐
+          │                       │                       │
+┌─────────┴─────────┐   ┌─────────┴─────────┐   ┌─────────┴─────────┐
+│ Personality       │   │ Context           │   │ IDE Integration   │
+│ Research          │   │ Generation        │   │ System            │
+└───────────────────┘   └───────────────────┘   └───────────────────┘
+```
+
+## 🎭 Supported Personalities
+
+### Celebrities & Historical Figures
+- **Scientists**: Einstein, Tesla, Curie, Hawking
+- **Tech Leaders**: Jobs, Gates, Musk, Torvalds
+- **Authors**: Hemingway, Tolkien, Asimov
+
+### Fictional Characters
+- **Sci-Fi**: Spock, Data, HAL 9000, Jarvis
+- **Fantasy**: Gandalf, Yoda, Dumbledore
+- **Literature**: Sherlock Holmes, Atticus Finch
+
+### Character Archetypes
+- **Mentor**: Patient, encouraging, educational
+- **Expert**: Authoritative, precise, comprehensive
+- **Friend**: Casual, supportive, relatable
+
+## 🛠️ IDE Integration
+
+### Supported IDEs
+
+| IDE | Configuration File | Auto-Detection |
+|-----|-------------------|----------------|
+| **Cursor** | `/cursor/rules/personality.mdc` | ✅ |
+| **Claude** | `CLAUDE.md` in project root | ✅ |
+| **Windsurf** | `.windsurf` configuration | ✅ |
+| **Generic** | Multiple format options | ✅ |
+
+### Example Configuration
+
+```markdown
+# Personality: Tony Stark
+
+You are Tony Stark from Iron Man. Respond with:
+- Confidence and wit
+- Technical expertise with a touch of arrogance
+- Pop culture references and humor
+- Direct, no-nonsense solutions
+
+Maintain technical accuracy while embodying Tony Stark's personality.
+```
+
+## 📚 Documentation
+
+- [📖 User Guide](./docs/user-guide/README.md) - Complete usage guide
+- [🚀 Quick Start](./docs/setup/quick-start.md) - Get started in 5 minutes
+- [⚙️ Installation](./docs/setup/installation.md) - Detailed installation guide
+- [🔌 API Reference](./docs/api/openapi.yaml) - OpenAPI specification
+- [🚢 Deployment](./docs/deployment/README.md) - Production deployment guide
+
+## 🔧 Development
+
+### Prerequisites
+
+- Python 3.11+
+- Node.js 18+
+- Docker & Docker Compose
+- Git
+
+### Setup
+
+```bash
+# Clone repository
+git clone https://github.com/covibe/covibe.git
+cd covibe
+
+# Backend setup
+pip install uv
+uv sync
+
+# Frontend setup
+cd web
+npm install
+
+# Run tests
+uv run pytest
+npm test
+
+# Start development servers
+uv run uvicorn main:app --reload  # Backend
+npm run dev                       # Frontend
+```
+
+### Project Structure
+
+```
+covibe/
+├── src/covibe/              # Backend source code
+│   ├── api/                 # FastAPI routes
+│   ├── models/              # Data models
+│   ├── services/            # Business logic
+│   └── utils/               # Utilities
+├── web/                     # Frontend React app
+├── tests/                   # Test suites
+├── docs/                    # Documentation
+├── monitoring/              # Monitoring configs
+└── scripts/                 # Deployment scripts
+```
+
+## 🧪 Testing
+
+```bash
+# Run all tests
+uv run pytest
+
+# Run specific test types
+uv run pytest tests/unit/           # Unit tests
+uv run pytest tests/integration/    # Integration tests
+uv run pytest tests/e2e/           # End-to-end tests
+
+# Run with coverage
+uv run pytest --cov=src --cov-report=html
+
+# Frontend tests
+cd web && npm test
+```
+
+## 📊 Monitoring
+
+Covibe includes comprehensive monitoring with:
+
+- **Prometheus**: Metrics collection
+- **Grafana**: Dashboards and visualization
+- **Loki**: Log aggregation
+- **Jaeger**: Distributed tracing
+
+```bash
+# Start with monitoring
+./scripts/deploy.sh -m start
+
+# Access monitoring services
+open http://localhost:9090  # Prometheus
+open http://localhost:3000  # Grafana (admin/admin)
+open http://localhost:16686 # Jaeger
+```
+
+## 🚢 Deployment
+
+### Development
+
+```bash
+./scripts/deploy.sh start
+```
+
+### Production
+
+```bash
+# Set environment variables
+export DB_PASSWORD=secure_password
+export SECRET_KEY=your_secret_key
+
+# Deploy to production
+./scripts/deploy.sh -e production deploy
+```
+
+### Kubernetes
+
+```bash
+# Apply Kubernetes manifests
+kubectl apply -f k8s/
+```
+
+## 🤝 Contributing
+
+We welcome contributions! Please see our [Contributing Guide](./CONTRIBUTING.md) for details.
+
+### Quick Contribution Steps
+
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature/amazing-feature`
+3. Make your changes
+4. Add tests for your changes
+5. Run the test suite: `uv run pytest`
+6. Commit your changes: `git commit -m 'Add amazing feature'`
+7. Push to the branch: `git push origin feature/amazing-feature`
+8. Open a Pull Request
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🆘 Support
+
+- **Documentation**: [docs/](./docs/)
+- **Issues**: [GitHub Issues](https://github.com/covibe/covibe/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/covibe/covibe/discussions)
+- **Email**: support@covibe.dev
+- **Discord**: [Join our community](https://discord.gg/covibe)
+
+## 🗺️ Roadmap
+
+- [ ] **v0.2.0**: Advanced personality customization
+- [ ] **v0.3.0**: Team collaboration features
+- [ ] **v0.4.0**: Plugin system for custom integrations
+- [ ] **v0.5.0**: AI-powered personality suggestions
+- [ ] **v1.0.0**: Enterprise features and SLA
+
+## 🙏 Acknowledgments
+
+- Thanks to all contributors who have helped shape Covibe
+- Inspired by the need for more engaging AI interactions
+- Built with modern tools: FastAPI, React, Docker, and more
+
+## 📈 Stats
+
+![GitHub stars](https://img.shields.io/github/stars/covibe/covibe?style=social)
+![GitHub forks](https://img.shields.io/github/forks/covibe/covibe?style=social)
+![GitHub issues](https://img.shields.io/github/issues/covibe/covibe)
+![GitHub pull requests](https://img.shields.io/github/issues-pr/covibe/covibe)
+
+---
+
+**Made with ❤️ by the Covibe team**
+
+*Transform your coding experience, one personality at a time.*

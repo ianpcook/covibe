@@ -60,6 +60,7 @@ class ProviderConfig:
     """Configuration for an LLM provider."""
     name: str
     api_key_env: Optional[str]
+    organization_env: Optional[str] = None
     base_url: str
     models: List[str]
     default_model: str
@@ -71,6 +72,12 @@ class ProviderConfig:
         """Get API key from environment."""
         if self.api_key_env:
             return os.getenv(self.api_key_env)
+        return None
+    
+    def get_organization(self) -> Optional[str]:
+        """Get organization ID from environment."""
+        if self.organization_env:
+            return os.getenv(self.organization_env)
         return None
     
     def is_available(self) -> bool:
@@ -148,6 +155,7 @@ async def load_provider_config(config_path: Optional[Path] = None) -> ProvidersC
             providers[name] = ProviderConfig(
                 name=name,
                 api_key_env=provider_data.get("api_key_env"),
+                organization_env=provider_data.get("organization_env"),
                 base_url=provider_data.get("base_url", ""),
                 models=provider_data.get("models", []),
                 default_model=provider_data.get("default_model", ""),
@@ -175,6 +183,7 @@ def get_default_provider_config() -> ProvidersConfig:
             "openai": ProviderConfig(
                 name="openai",
                 api_key_env="OPENAI_API_KEY",
+                organization_env="OPENAI_ORG_ID",
                 base_url="https://api.openai.com/v1",
                 models=["gpt-4", "gpt-3.5-turbo"],
                 default_model="gpt-4"
@@ -241,7 +250,8 @@ async def create_llm_client_from_config(
     if provider_name == "openai":
         return await create_openai_client(
             api_key=provider_config.get_api_key(),
-            model=model
+            model=model,
+            organization=provider_config.get_organization()
         )
     elif provider_name == "anthropic":
         return await create_anthropic_client(

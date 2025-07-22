@@ -31,17 +31,15 @@ from ..models.llm import (
 from ..utils.validation import sanitize_text, detect_personality_type
 from ..utils.error_handling import (
     ResearchError, NetworkError, InputValidationError, RateLimitError,
-    error_handler, ErrorCategory, RetryConfig, with_retry, ErrorContext
+    error_handler, ErrorCategory, RetryConfig, with_retry, ErrorContext,
+    LLMConnectionError, LLMRateLimitError, LLMTimeoutError
 )
 from ..utils.monitoring import record_error, performance_monitor
 from .llm_client import (
     LLMClient,
     create_openai_client,
     create_anthropic_client,
-    create_local_client,
-    LLMConnectionError,
-    LLMRateLimitError,
-    LLMTimeoutError
+    create_local_client
 )
 from .prompt_manager import (
     PromptConfig,
@@ -720,7 +718,13 @@ async def research_personality_with_llm(
         )
         
     except Exception as e:
-        record_error(e, "research")
+        from ..utils.error_handling import PersonalitySystemError, ErrorCategory, ErrorSeverity
+        wrapped_error = PersonalitySystemError(
+            message=str(e),
+            category=ErrorCategory.LLM,
+            severity=ErrorSeverity.MEDIUM
+        )
+        record_error(wrapped_error, "research")
         errors.append(f"Unexpected LLM error: {str(e)}")
         # Don't raise, fall back to traditional research
         return ResearchResult(
@@ -768,7 +772,13 @@ async def fallback_research_personality(description: str) -> ResearchResult:
                     if profile:
                         profiles.append(profile)
         except Exception as e:
-            record_error(e, "research")
+            from ..utils.error_handling import PersonalitySystemError, ErrorCategory, ErrorSeverity
+            wrapped_error = PersonalitySystemError(
+                message=str(e),
+                category=ErrorCategory.RESEARCH,
+                severity=ErrorSeverity.LOW
+            )
+            record_error(wrapped_error, "research")
             errors.append(f"Wikipedia research failed: {str(e)}")
     
     # Generate suggestions if no results
@@ -937,7 +947,13 @@ async def research_personality(
                             
             except Exception as e:
                 # Log LLM errors but don't fail - fall back to traditional research
-                record_error(e, "research")
+                from ..utils.error_handling import PersonalitySystemError, ErrorCategory, ErrorSeverity
+                wrapped_error = PersonalitySystemError(
+                    message=str(e),
+                    category=ErrorCategory.LLM,
+                    severity=ErrorSeverity.MEDIUM
+                )
+                record_error(wrapped_error, "research")
                 errors.append(f"LLM research failed: {str(e)}")
         
         # Fallback to traditional research methods

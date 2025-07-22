@@ -83,14 +83,18 @@ class LLMClient(Protocol):
 class OpenAIClient:
     """OpenAI LLM client implementation."""
     
-    def __init__(self, api_key: str, model: str):
+    def __init__(self, api_key: str, model: str, organization: Optional[str] = None):
         """Initialize OpenAI client.
         
         Args:
             api_key: OpenAI API key
             model: Model name (e.g., 'gpt-4', 'gpt-3.5-turbo')
+            organization: Optional organization ID for API key
         """
-        self.client = openai.AsyncOpenAI(api_key=api_key)
+        client_kwargs = {"api_key": api_key}
+        if organization:
+            client_kwargs["organization"] = organization
+        self.client = openai.AsyncOpenAI(**client_kwargs)
         self.model = model
         self.provider = "openai"
     
@@ -298,17 +302,18 @@ class LocalLLMClient:
 
 
 # Factory functions for creating LLM clients
-async def create_openai_client(api_key: str, model: str) -> LLMClient:
+async def create_openai_client(api_key: str, model: str, organization: Optional[str] = None) -> LLMClient:
     """Create OpenAI client implementation.
     
     Args:
         api_key: OpenAI API key
         model: Model name (e.g., 'gpt-4', 'gpt-3.5-turbo')
+        organization: Optional organization ID for API key
         
     Returns:
         LLMClient implementation for OpenAI
     """
-    return OpenAIClient(api_key, model)
+    return OpenAIClient(api_key, model, organization)
 
 
 async def create_anthropic_client(api_key: str, model: str) -> LLMClient:
@@ -353,9 +358,10 @@ def create_client_factory(provider: str, **kwargs) -> LLMClient:
     if provider == "openai":
         api_key = kwargs.get("api_key")
         model = kwargs.get("model", "gpt-4")
+        organization = kwargs.get("organization")
         if not api_key:
             raise ValueError("OpenAI API key is required")
-        return OpenAIClient(api_key, model)
+        return OpenAIClient(api_key, model, organization)
     
     elif provider == "anthropic":
         api_key = kwargs.get("api_key")
