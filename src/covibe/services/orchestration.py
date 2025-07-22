@@ -239,7 +239,7 @@ async def orchestrate_personality_request_enhanced(
                 context=context_result,
                 ide_type="unknown",
                 file_path="",
-                active=False,
+                active=True,
                 created_at=datetime.now(),
                 updated_at=datetime.now()
             )
@@ -364,7 +364,7 @@ async def orchestrate_personality_request(
                 context=context_result,
                 ide_type="unknown",
                 file_path="",
-                active=False,
+                active=True,
                 created_at=datetime.now(),
                 updated_at=datetime.now()
             )
@@ -465,7 +465,7 @@ async def _execute_ide_integration_stage(
             context=context,
             ide_type=ide_type,
             file_path=file_path,
-            active=bool(primary_ide),
+            active=True,  # Configuration is active regardless of IDE detection
             created_at=datetime.now(),
             updated_at=datetime.now()
         )

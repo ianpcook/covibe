@@ -90,6 +90,10 @@ class ResearchResponse(BaseModel):
     confidence: float
     suggestions: List[str]
     errors: List[str]
+    # New fields for LLM enhancement (optional for backward compatibility)
+    llm_used: Optional[bool] = Field(default=False, description="Whether LLM was used for research")
+    llm_provider: Optional[str] = Field(default=None, description="LLM provider used")
+    processing_time_ms: Optional[float] = Field(default=None, description="Processing time in milliseconds")
 
 
 class ConfigurationHistoryResponse(BaseModel):
@@ -172,10 +176,13 @@ async def create_error_response(
 async def create_personality_config(
     request: Request,
     personality_request: PersonalityRequestCreate,
+    use_llm: bool = Query(default=True, description="Whether to use LLM for research"),
+    llm_provider: Optional[str] = Query(default=None, description="Specific LLM provider to use"),
     persistence_service: ConfigurationPersistenceService = Depends(get_persistence_service)
 ) -> PersonalityConfigResponse:
     """
     Create a new personality configuration using the orchestration system.
+    Enhanced with LLM research capabilities.
     """
     try:
         # Create PersonalityRequest for orchestration
@@ -192,7 +199,13 @@ async def create_personality_config(
         if personality_request.project_path:
             project_path = Path(personality_request.project_path)
         
-        # Use orchestration system
+        # Log the LLM-enhanced personality creation request
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"LLM personality creation request: description='{personality_request.description}' use_llm={use_llm} provider={llm_provider} request_id={getattr(request.state, 'request_id', 'unknown')}")
+        
+        # Use orchestration system - for now, continue using existing orchestration
+        # until we can enhance it with LLM parameters
         result = await orchestrate_personality_request(
             request_obj,
             project_path=project_path,
@@ -295,17 +308,45 @@ async def list_personality_configs(
 @router.post("/research", response_model=ResearchResponse, status_code=status.HTTP_200_OK)
 async def research_personality_endpoint(
     request: Request,
-    research_request: ResearchOnlyRequest
+    research_request: ResearchOnlyRequest,
+    use_llm: bool = Query(default=True, description="Whether to use LLM for research"),
+    llm_provider: Optional[str] = Query(default=None, description="Specific LLM provider to use")
 ) -> ResearchResponse:
     """
     Research a personality without creating a full configuration.
+    Enhanced with LLM research capabilities.
     """
+    import time
+    start_time = time.time()
+    
     try:
-        # Use orchestration system for research-only
-        result = await orchestrate_research_only(
+        # Import research function
+        from ..services.research import research_personality
+        
+        # Log the LLM-enhanced request
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"LLM research request: query='{research_request.description}' use_llm={use_llm} provider={llm_provider} request_id={getattr(request.state, 'request_id', 'unknown')}")
+        
+        # Use enhanced research function with LLM support
+        result = await research_personality(
             research_request.description,
-            use_cache=research_request.use_cache
+            use_llm=use_llm,
+            llm_provider=llm_provider,
+            cache_enabled=research_request.use_cache
         )
+        
+        # Check if LLM was actually used based on source types
+        llm_used = any(
+            any(s.type.startswith("llm_") for s in p.sources) if p.sources else False
+            for p in result.profiles
+        )
+        
+        # Calculate processing time
+        processing_time = (time.time() - start_time) * 1000  # Convert to milliseconds
+        
+        # Log the response
+        logger.info(f"LLM research response: profiles_found={len(result.profiles)} llm_used={llm_used} provider={llm_provider} processing_time={processing_time:.2f}ms request_id={getattr(request.state, 'request_id', 'unknown')}")
         
         return ResearchResponse(
             query=result.query,
@@ -323,13 +364,17 @@ async def research_personality_endpoint(
                         "technical_level": p.communication_style.technical_level.value
                     },
                     "mannerisms": p.mannerisms,
-                    "confidence": p.sources[0].confidence if p.sources else 0.0
+                    "confidence": p.sources[0].confidence if p.sources else 0.0,
+                    "llm_enhanced": any(s.type.startswith("llm_") for s in p.sources) if p.sources else False
                 }
                 for p in result.profiles
             ],
             confidence=result.confidence,
             suggestions=result.suggestions,
-            errors=result.errors
+            errors=result.errors,
+            llm_used=llm_used,
+            llm_provider=llm_provider if llm_used else None,
+            processing_time_ms=processing_time
         )
         
     except Exception as e:
@@ -455,6 +500,137 @@ async def clear_personality_cache(
             request,
             "CACHE_CLEAR_ERROR",
             f"Failed to clear cache: {str(e)}",
+            ["Contact support if the problem persists"]
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=jsonable_encoder(error_response.dict())
+        )
+
+
+@router.get("/llm/status")
+async def get_llm_provider_status(request: Request):
+    """
+    Get status and configuration information for LLM providers.
+    """
+    try:
+        import os
+        from ..services.llm_client import (
+            create_openai_client,
+            create_anthropic_client,
+            create_local_client
+        )
+        
+        providers = {}
+        
+        # Check OpenAI provider
+        if os.getenv("OPENAI_API_KEY"):
+            try:
+                client = await create_openai_client(
+                    api_key=os.getenv("OPENAI_API_KEY"),
+                    model="gpt-4"
+                )
+                connection_status = await client.validate_connection()
+                providers["openai"] = {
+                    "available": True,
+                    "connected": connection_status,
+                    "models": ["gpt-4", "gpt-3.5-turbo"],
+                    "default_model": "gpt-4"
+                }
+            except Exception as e:
+                providers["openai"] = {
+                    "available": True,
+                    "connected": False,
+                    "error": str(e),
+                    "models": ["gpt-4", "gpt-3.5-turbo"],
+                    "default_model": "gpt-4"
+                }
+        else:
+            providers["openai"] = {
+                "available": False,
+                "connected": False,
+                "error": "API key not configured",
+                "models": ["gpt-4", "gpt-3.5-turbo"],
+                "default_model": "gpt-4"
+            }
+        
+        # Check Anthropic provider
+        if os.getenv("ANTHROPIC_API_KEY"):
+            try:
+                client = await create_anthropic_client(
+                    api_key=os.getenv("ANTHROPIC_API_KEY"),
+                    model="claude-3-sonnet-20240229"
+                )
+                connection_status = await client.validate_connection()
+                providers["anthropic"] = {
+                    "available": True,
+                    "connected": connection_status,
+                    "models": ["claude-3-opus-20240229", "claude-3-sonnet-20240229"],
+                    "default_model": "claude-3-sonnet-20240229"
+                }
+            except Exception as e:
+                providers["anthropic"] = {
+                    "available": True,
+                    "connected": False,
+                    "error": str(e),
+                    "models": ["claude-3-opus-20240229", "claude-3-sonnet-20240229"],
+                    "default_model": "claude-3-sonnet-20240229"
+                }
+        else:
+            providers["anthropic"] = {
+                "available": False,
+                "connected": False,
+                "error": "API key not configured",
+                "models": ["claude-3-opus-20240229", "claude-3-sonnet-20240229"],
+                "default_model": "claude-3-sonnet-20240229"
+            }
+        
+        # Check local provider
+        local_endpoint = os.getenv("LOCAL_LLM_ENDPOINT", "http://localhost:11434")
+        try:
+            client = await create_local_client(
+                endpoint=local_endpoint,
+                model="llama2"
+            )
+            connection_status = await client.validate_connection()
+            providers["local"] = {
+                "available": True,
+                "connected": connection_status,
+                "endpoint": local_endpoint,
+                "models": ["llama2", "mistral"],
+                "default_model": "llama2"
+            }
+        except Exception as e:
+            providers["local"] = {
+                "available": True,
+                "connected": False,
+                "error": str(e),
+                "endpoint": local_endpoint,
+                "models": ["llama2", "mistral"],
+                "default_model": "llama2"
+            }
+        
+        # Determine the preferred provider
+        preferred_provider = None
+        if providers["openai"]["connected"]:
+            preferred_provider = "openai"
+        elif providers["anthropic"]["connected"]:
+            preferred_provider = "anthropic"
+        elif providers["local"]["connected"]:
+            preferred_provider = "local"
+        
+        return {
+            "providers": providers,
+            "preferred_provider": preferred_provider,
+            "llm_research_enabled": preferred_provider is not None,
+            "timestamp": datetime.now()
+        }
+        
+    except Exception as e:
+        error_response = await create_error_response(
+            request,
+            "LLM_STATUS_ERROR",
+            f"Failed to get LLM provider status: {str(e)}",
             ["Contact support if the problem persists"]
         )
         raise HTTPException(

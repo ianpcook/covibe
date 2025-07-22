@@ -51,6 +51,34 @@ class ComponentHealth:
     details: Dict[str, Any] = field(default_factory=dict)
 
 
+@dataclass
+class ResearchMethodMetrics:
+    """Performance metrics for research methods."""
+    method_name: str
+    total_requests: int = 0
+    successful_requests: int = 0
+    failed_requests: int = 0
+    total_response_time: float = 0.0
+    last_used: Optional[datetime] = None
+    success_rate: float = 0.0
+    avg_response_time: float = 0.0
+    
+    def record_request(self, success: bool, response_time: float):
+        """Record a research method request."""
+        self.total_requests += 1
+        self.total_response_time += response_time
+        self.last_used = datetime.now()
+        
+        if success:
+            self.successful_requests += 1
+        else:
+            self.failed_requests += 1
+        
+        # Update derived metrics
+        self.success_rate = self.successful_requests / self.total_requests if self.total_requests > 0 else 0.0
+        self.avg_response_time = self.total_response_time / self.total_requests if self.total_requests > 0 else 0.0
+
+
 class ErrorMonitor:
     """Monitor and track errors across the system."""
     
@@ -58,6 +86,7 @@ class ErrorMonitor:
         self.window_minutes = window_minutes
         self.error_metrics: Dict[str, ErrorMetric] = defaultdict(ErrorMetric)
         self.component_metrics: Dict[str, Dict[str, ErrorMetric]] = defaultdict(lambda: defaultdict(ErrorMetric))
+        self.research_metrics: Dict[str, ResearchMethodMetrics] = defaultdict(lambda: ResearchMethodMetrics("unknown"))
         self.lock = Lock()
         self.start_time = datetime.now()
     
@@ -75,6 +104,18 @@ class ErrorMonitor:
             # Record component-specific metrics
             if component:
                 self.component_metrics[component][error_key].record_error()
+    
+    def record_research_method(
+        self,
+        method_name: str,
+        success: bool,
+        response_time: float
+    ):
+        """Record research method performance."""
+        with self.lock:
+            if method_name not in self.research_metrics:
+                self.research_metrics[method_name] = ResearchMethodMetrics(method_name)
+            self.research_metrics[method_name].record_request(success, response_time)
     
     def get_error_rate(
         self,
@@ -207,6 +248,55 @@ class ErrorMonitor:
                     summary["components"][component]["categories"][category] += metric.count
             
             return summary
+    
+    def get_research_performance_summary(self) -> Dict[str, Any]:
+        """Get performance comparison between research methods."""
+        with self.lock:
+            summary = {
+                "methods": {},
+                "comparison": {}
+            }
+            
+            # Individual method metrics
+            for method_name, metrics in self.research_metrics.items():
+                summary["methods"][method_name] = {
+                    "total_requests": metrics.total_requests,
+                    "success_rate": metrics.success_rate,
+                    "avg_response_time": metrics.avg_response_time,
+                    "last_used": metrics.last_used.isoformat() if metrics.last_used else None
+                }
+            
+            # Method comparisons
+            if len(self.research_metrics) > 1:
+                methods = list(self.research_metrics.values())
+                
+                # Find best/worst performing methods
+                if methods:
+                    best_success = max(methods, key=lambda m: m.success_rate)
+                    worst_success = min(methods, key=lambda m: m.success_rate)
+                    fastest = min(methods, key=lambda m: m.avg_response_time or float('inf'))
+                    slowest = max(methods, key=lambda m: m.avg_response_time or 0)
+                    
+                    summary["comparison"] = {
+                        "highest_success_rate": {
+                            "method": best_success.method_name,
+                            "rate": best_success.success_rate
+                        },
+                        "lowest_success_rate": {
+                            "method": worst_success.method_name,
+                            "rate": worst_success.success_rate
+                        },
+                        "fastest_method": {
+                            "method": fastest.method_name,
+                            "avg_time": fastest.avg_response_time
+                        },
+                        "slowest_method": {
+                            "method": slowest.method_name,
+                            "avg_time": slowest.avg_response_time
+                        }
+                    }
+            
+            return summary
 
 
 class HealthChecker:
@@ -311,6 +401,11 @@ def record_error(error: PersonalitySystemError, component: Optional[str] = None)
     _error_monitor.record_error(error, component)
 
 
+def record_research_method(method_name: str, success: bool, response_time: float):
+    """Record research method performance in the global monitor."""
+    _error_monitor.record_research_method(method_name, success, response_time)
+
+
 def get_system_health() -> Dict[str, Any]:
     """Get current system health status."""
     return _health_checker.get_system_health()
@@ -319,6 +414,11 @@ def get_system_health() -> Dict[str, Any]:
 def get_error_metrics() -> Dict[str, Any]:
     """Get current error metrics."""
     return _error_monitor.get_error_summary()
+
+
+def get_research_performance_metrics() -> Dict[str, Any]:
+    """Get research method performance comparison."""
+    return _error_monitor.get_research_performance_summary()
 
 
 class PerformanceTimer:

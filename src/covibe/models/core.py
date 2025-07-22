@@ -3,7 +3,7 @@
 from datetime import datetime
 from enum import Enum
 from typing import Optional, List
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 from ..utils.validation import (
     sanitize_text,
     validate_personality_description,
@@ -56,7 +56,8 @@ class PersonalityRequest(BaseModel):
     timestamp: datetime
     source: SourceType
     
-    @validator('description')
+    @field_validator('description')
+    @classmethod
     def validate_description(cls, v):
         """Validate and sanitize personality description."""
         sanitized = sanitize_text(v)
@@ -65,7 +66,8 @@ class PersonalityRequest(BaseModel):
             raise ValueError(f"Invalid description: {'; '.join(errors)}")
         return sanitized
     
-    @validator('user_id')
+    @field_validator('user_id')
+    @classmethod
     def validate_user_id(cls, v):
         """Validate and sanitize user ID if provided."""
         if v is not None:
@@ -80,12 +82,14 @@ class PersonalityTrait(BaseModel):
     intensity: int = Field(ge=1, le=10, description="Trait intensity from 1-10")
     examples: List[str]
     
-    @validator('category', 'trait')
+    @field_validator('category', 'trait')
+    @classmethod
     def validate_text_fields(cls, v):
         """Validate and sanitize text fields."""
         return sanitize_text(v)
     
-    @validator('examples')
+    @field_validator('examples')
+    @classmethod
     def validate_examples(cls, v):
         """Validate and sanitize example list."""
         return [sanitize_text(example) for example in v if example.strip()]
@@ -98,7 +102,8 @@ class CommunicationStyle(BaseModel):
     verbosity: VerbosityLevel
     technical_level: TechnicalLevel
     
-    @validator('tone')
+    @field_validator('tone')
+    @classmethod
     def validate_tone(cls, v):
         """Validate and sanitize tone field."""
         return sanitize_text(v)
@@ -111,7 +116,8 @@ class ResearchSource(BaseModel):
     confidence: float = Field(ge=0.0, le=1.0, description="Confidence in source")
     last_updated: datetime
     
-    @validator('url')
+    @field_validator('url')
+    @classmethod
     def validate_url_field(cls, v):
         """Validate URL format if provided."""
         if v is not None:
@@ -120,7 +126,8 @@ class ResearchSource(BaseModel):
                 raise ValueError(f"Invalid URL: {'; '.join(errors)}")
         return v
     
-    @validator('type')
+    @field_validator('type')
+    @classmethod
     def validate_type(cls, v):
         """Validate and sanitize type field."""
         return sanitize_text(v)
@@ -136,7 +143,8 @@ class PersonalityProfile(BaseModel):
     mannerisms: List[str]
     sources: List[ResearchSource]
     
-    @validator('name')
+    @field_validator('name')
+    @classmethod
     def validate_name(cls, v):
         """Validate and sanitize personality name."""
         sanitized = sanitize_text(v)
@@ -145,7 +153,8 @@ class PersonalityProfile(BaseModel):
             raise ValueError(f"Invalid name: {'; '.join(errors)}")
         return sanitized
     
-    @validator('mannerisms')
+    @field_validator('mannerisms')
+    @classmethod
     def validate_mannerisms(cls, v):
         """Validate and sanitize mannerisms list."""
         return [sanitize_text(mannerism) for mannerism in v if mannerism.strip()]
@@ -162,7 +171,8 @@ class PersonalityConfig(BaseModel):
     created_at: datetime
     updated_at: datetime
     
-    @validator('context', 'ide_type', 'file_path')
+    @field_validator('context', 'ide_type', 'file_path')
+    @classmethod
     def validate_text_fields(cls, v):
         """Validate and sanitize text fields."""
         return sanitize_text(v)

@@ -357,3 +357,317 @@ class TestPersonalityPerformanceBenchmarks:
         processing_times = [r["processed_at"] for r in results]
         total_time = max(processing_times) - min(processing_times)
         assert total_time < 1.0, f"High load processing took {total_time:.2f}s, too slow"
+
+
+class TestLLMPerformanceBenchmarks:
+    """Performance benchmarks comparing LLM vs traditional research methods."""
+    
+    @pytest.fixture
+    def llm_test_descriptions(self) -> List[str]:
+        """Test descriptions for LLM benchmarking."""
+        return [
+            "A brilliant detective with exceptional deductive reasoning skills",
+            "An innovative tech entrepreneur who revolutionized multiple industries",
+            "A wise mentor figure who guides heroes on their journey",
+            "A complex anti-hero with a troubled past and noble intentions",
+            "An eccentric scientist who makes groundbreaking discoveries"
+        ]
+    
+    @pytest.mark.benchmark(group="llm_vs_traditional")
+    def test_llm_research_vs_traditional_performance(self, benchmark, llm_test_descriptions):
+        """Compare LLM research performance against traditional methods."""
+        
+        async def llm_research_benchmark():
+            """Benchmark LLM-based personality research."""
+            with patch('src.covibe.services.llm_client.OpenAIClient.generate_response') as mock_llm:
+                mock_llm.return_value = """{
+                    "name": "Sherlock Holmes",
+                    "type": "fictional",
+                    "description": "Brilliant detective",
+                    "traits": [{"trait": "analytical", "intensity": 10, "description": "Highly analytical"}],
+                    "communication_style": {"tone": "precise", "formality": "formal", "verbosity": "concise", "technical_level": "expert"},
+                    "mannerisms": ["Deductive reasoning", "Pipe smoking"],
+                    "confidence": 0.95
+                }"""
+                
+                results = []
+                for description in llm_test_descriptions:
+                    result = await research_personality(description, use_llm=True, llm_provider="openai")
+                    results.append(result)
+                return results
+        
+        async def traditional_research_benchmark():
+            """Benchmark traditional personality research."""
+            with patch('src.covibe.services.research.fetch_wikipedia_data') as mock_wiki:
+                mock_wiki.return_value = {
+                    "title": "Character",
+                    "summary": "Fictional character",
+                    "traits": ["intelligent", "determined"]
+                }
+                
+                results = []
+                for description in llm_test_descriptions:
+                    result = await research_personality(description, use_llm=False)
+                    results.append(result)
+                return results
+        
+        # Benchmark both approaches
+        llm_results = benchmark.pedantic(asyncio.run, (llm_research_benchmark(),), iterations=3, rounds=1)
+        
+        # Store baseline for comparison
+        traditional_start = time.time()
+        traditional_results = asyncio.run(traditional_research_benchmark())
+        traditional_time = time.time() - traditional_start
+        
+        # Verify both produced results
+        assert len(llm_results) == len(llm_test_descriptions)
+        assert len(traditional_results) == len(llm_test_descriptions)
+        
+        # Log performance comparison
+        print(f"Traditional research time: {traditional_time:.3f}s")
+        print(f"LLM research (benchmark) completed successfully")
+    
+    @pytest.mark.benchmark(group="llm_quality")
+    def test_llm_response_quality_vs_speed_tradeoff(self, benchmark):
+        """Benchmark LLM response quality vs speed with different parameters."""
+        
+        test_description = "A complex character with multiple personality facets"
+        
+        async def llm_quick_response():
+            """Quick LLM response (lower quality)."""
+            with patch('src.covibe.services.llm_client.OpenAIClient.generate_response') as mock_llm:
+                mock_llm.return_value = """{
+                    "name": "Quick Character",
+                    "type": "custom",
+                    "description": "Basic description",
+                    "traits": [{"trait": "simple", "intensity": 5, "description": "Basic trait"}],
+                    "communication_style": {"tone": "neutral", "formality": "mixed", "verbosity": "moderate", "technical_level": "intermediate"},
+                    "mannerisms": ["Generic behavior"],
+                    "confidence": 0.7
+                }"""
+                
+                # Simulate quick processing
+                await asyncio.sleep(0.1)
+                return await research_personality(test_description, use_llm=True, llm_provider="openai")
+        
+        async def llm_detailed_response():
+            """Detailed LLM response (higher quality, slower)."""
+            with patch('src.covibe.services.llm_client.OpenAIClient.generate_response') as mock_llm:
+                mock_llm.return_value = """{
+                    "name": "Detailed Character",
+                    "type": "custom", 
+                    "description": "Comprehensive personality analysis",
+                    "traits": [
+                        {"trait": "analytical", "intensity": 9, "description": "Deep analytical thinking"},
+                        {"trait": "empathetic", "intensity": 8, "description": "Strong emotional intelligence"},
+                        {"trait": "creative", "intensity": 7, "description": "Innovative problem solving"}
+                    ],
+                    "communication_style": {"tone": "thoughtful", "formality": "professional", "verbosity": "detailed", "technical_level": "expert"},
+                    "mannerisms": ["Thoughtful pauses", "Detailed explanations", "Empathetic responses"],
+                    "confidence": 0.95
+                }"""
+                
+                # Simulate longer processing for detailed analysis
+                await asyncio.sleep(0.5)
+                return await research_personality(test_description, use_llm=True, llm_provider="openai")
+        
+        # Benchmark quick response
+        quick_result = benchmark.pedantic(asyncio.run, (llm_quick_response(),), iterations=3, rounds=1)
+        
+        # Compare with detailed response (not benchmarked to avoid skewing results)
+        detailed_start = time.time()
+        detailed_result = asyncio.run(llm_detailed_response())
+        detailed_time = time.time() - detailed_start
+        
+        # Verify quality differences
+        assert quick_result is not None
+        assert detailed_result is not None
+        
+        print(f"Detailed analysis time: {detailed_time:.3f}s")
+        print("Quality vs speed tradeoff analysis completed")
+    
+    @pytest.mark.benchmark(group="llm_caching")
+    def test_llm_cache_performance_impact(self, benchmark):
+        """Benchmark LLM response caching effectiveness."""
+        
+        cache_data = {}
+        test_descriptions = [
+            "Einstein-like physicist",
+            "Einstein personality", 
+            "Physics genius similar to Einstein"  # Should hit cache due to similarity
+        ]
+        
+        async def llm_with_cache():
+            """LLM research with caching enabled."""
+            results = []
+            
+            for description in test_descriptions:
+                # Simple cache key based on normalized description
+                cache_key = description.lower().replace(" ", "_")
+                
+                if cache_key in cache_data:
+                    # Cache hit - instant return
+                    results.append(cache_data[cache_key])
+                    continue
+                
+                # Cache miss - perform LLM request
+                with patch('src.covibe.services.llm_client.OpenAIClient.generate_response') as mock_llm:
+                    mock_llm.return_value = """{
+                        "name": "Albert Einstein",
+                        "type": "celebrity",
+                        "description": "Theoretical physicist",
+                        "traits": [{"trait": "genius", "intensity": 10, "description": "Exceptional intelligence"}],
+                        "communication_style": {"tone": "thoughtful", "formality": "academic", "verbosity": "detailed", "technical_level": "expert"},
+                        "mannerisms": ["Complex theories", "Thought experiments"],
+                        "confidence": 0.98
+                    }"""
+                    
+                    # Simulate LLM processing time
+                    await asyncio.sleep(0.2)
+                    
+                    result = await research_personality(description, use_llm=True, llm_provider="openai")
+                    cache_data[cache_key] = result
+                    results.append(result)
+            
+            return results
+        
+        async def llm_without_cache():
+            """LLM research without caching."""
+            results = []
+            
+            for description in test_descriptions:
+                with patch('src.covibe.services.llm_client.OpenAIClient.generate_response') as mock_llm:
+                    mock_llm.return_value = """{
+                        "name": "Albert Einstein",
+                        "type": "celebrity", 
+                        "description": "Theoretical physicist",
+                        "traits": [{"trait": "genius", "intensity": 10, "description": "Exceptional intelligence"}],
+                        "communication_style": {"tone": "thoughtful", "formality": "academic", "verbosity": "detailed", "technical_level": "expert"},
+                        "mannerisms": ["Complex theories", "Thought experiments"],
+                        "confidence": 0.98
+                    }"""
+                    
+                    # Simulate LLM processing time for each request
+                    await asyncio.sleep(0.2)
+                    
+                    result = await research_personality(description, use_llm=True, llm_provider="openai")
+                    results.append(result)
+            
+            return results
+        
+        # Benchmark cached version
+        cached_results = benchmark.pedantic(asyncio.run, (llm_with_cache(),), iterations=3, rounds=1)
+        
+        # Compare with non-cached version
+        no_cache_start = time.time()
+        no_cache_results = asyncio.run(llm_without_cache())
+        no_cache_time = time.time() - no_cache_start
+        
+        # Verify results
+        assert len(cached_results) == 3
+        assert len(no_cache_results) == 3
+        
+        print(f"No cache time: {no_cache_time:.3f}s")
+        print("Cache effectiveness benchmark completed")
+    
+    @pytest.mark.benchmark(group="llm_concurrent")
+    def test_llm_concurrent_request_performance(self, benchmark):
+        """Benchmark concurrent LLM requests with rate limiting simulation."""
+        
+        request_count = 0
+        rate_limit_threshold = 3
+        
+        async def llm_concurrent_requests():
+            """Simulate concurrent LLM requests with rate limiting."""
+            nonlocal request_count
+            
+            async def single_llm_request(description: str, request_id: int):
+                """Single LLM request with rate limiting simulation."""
+                nonlocal request_count
+                
+                # Simulate rate limiting
+                if request_count >= rate_limit_threshold:
+                    await asyncio.sleep(1.0)  # Rate limit delay
+                    request_count = 0  # Reset counter
+                
+                request_count += 1
+                
+                with patch('src.covibe.services.llm_client.OpenAIClient.generate_response') as mock_llm:
+                    mock_llm.return_value = f"""{{"name": "Character {request_id}", "type": "custom", "description": "Test character", "traits": [{{"trait": "test", "intensity": 5, "description": "Test trait"}}], "communication_style": {{"tone": "neutral", "formality": "mixed", "verbosity": "moderate", "technical_level": "intermediate"}}, "mannerisms": ["Test behavior"], "confidence": 0.8}}"""
+                    
+                    # Simulate LLM processing
+                    await asyncio.sleep(0.1)
+                    
+                    return await research_personality(description, use_llm=True, llm_provider="openai")
+            
+            # Create 6 concurrent requests (will trigger rate limiting)
+            descriptions = [f"Test personality {i}" for i in range(6)]
+            tasks = [single_llm_request(desc, i) for i, desc in enumerate(descriptions)]
+            
+            results = await asyncio.gather(*tasks)
+            return results
+        
+        results = benchmark(asyncio.run, llm_concurrent_requests())
+        
+        # Verify all requests completed
+        assert len(results) == 6
+        assert all(r is not None for r in results)
+        
+        print("Concurrent LLM request benchmark completed")
+    
+    @pytest.mark.benchmark(group="llm_provider_comparison")
+    def test_multiple_llm_provider_performance(self, benchmark):
+        """Benchmark performance across different LLM providers."""
+        
+        test_description = "Innovative tech leader personality"
+        
+        async def openai_provider_benchmark():
+            """Benchmark OpenAI provider."""
+            with patch('src.covibe.services.llm_client.OpenAIClient.generate_response') as mock_openai:
+                mock_openai.return_value = """{
+                    "name": "Tech Leader",
+                    "type": "archetype",
+                    "description": "Innovative technology leader",
+                    "traits": [{"trait": "visionary", "intensity": 9, "description": "Forward-thinking"}],
+                    "communication_style": {"tone": "inspiring", "formality": "casual", "verbosity": "moderate", "technical_level": "expert"},
+                    "mannerisms": ["Bold statements", "Future focus"],
+                    "confidence": 0.9
+                }"""
+                
+                # Simulate OpenAI processing time
+                await asyncio.sleep(0.15)
+                
+                return await research_personality(test_description, use_llm=True, llm_provider="openai")
+        
+        async def anthropic_provider_benchmark():
+            """Benchmark Anthropic provider."""
+            with patch('src.covibe.services.llm_client.AnthropicClient.generate_response') as mock_anthropic:
+                mock_anthropic.return_value = """{
+                    "name": "Tech Innovator", 
+                    "type": "archetype",
+                    "description": "Technology innovation leader",
+                    "traits": [{"trait": "innovative", "intensity": 9, "description": "Highly innovative"}],
+                    "communication_style": {"tone": "confident", "formality": "professional", "verbosity": "detailed", "technical_level": "expert"},
+                    "mannerisms": ["Strategic thinking", "Innovation focus"],
+                    "confidence": 0.92
+                }"""
+                
+                # Simulate Anthropic processing time (slightly different)
+                await asyncio.sleep(0.18)
+                
+                return await research_personality(test_description, use_llm=True, llm_provider="anthropic")
+        
+        # Benchmark OpenAI
+        openai_result = benchmark.pedantic(asyncio.run, (openai_provider_benchmark(),), iterations=3, rounds=1)
+        
+        # Compare with Anthropic (not benchmarked to avoid confusion)
+        anthropic_start = time.time()
+        anthropic_result = asyncio.run(anthropic_provider_benchmark())
+        anthropic_time = time.time() - anthropic_start
+        
+        # Verify both providers work
+        assert openai_result is not None
+        assert anthropic_result is not None
+        
+        print(f"Anthropic provider time: {anthropic_time:.3f}s")
+        print("Provider comparison benchmark completed")

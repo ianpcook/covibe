@@ -31,6 +31,8 @@ class ErrorCategory(str, Enum):
     AUTHENTICATION = "authentication"
     RATE_LIMIT = "rate_limit"
     TIMEOUT = "timeout"
+    LLM = "llm"
+    VALIDATION = "validation"
 
 
 class ErrorSeverity(str, Enum):
@@ -167,6 +169,90 @@ class SystemError(PersonalitySystemError):
         )
 
 
+class LLMError(PersonalitySystemError):
+    """Base class for LLM-related errors."""
+    
+    def __init__(self, message: str, provider: Optional[str] = None, model: Optional[str] = None, **kwargs):
+        super().__init__(
+            message=message,
+            category=ErrorCategory.LLM,
+            severity=ErrorSeverity.MEDIUM,
+            **kwargs
+        )
+        if provider:
+            self.details["provider"] = provider
+        if model:
+            self.details["model"] = model
+
+
+class LLMConnectionError(LLMError):
+    """LLM service connection failed."""
+    
+    def __init__(self, message: str, endpoint: Optional[str] = None, **kwargs):
+        super().__init__(
+            message=message,
+            severity=ErrorSeverity.HIGH,
+            **kwargs
+        )
+        if endpoint:
+            self.details["endpoint"] = endpoint
+
+
+class LLMRateLimitError(LLMError):
+    """LLM service rate limit exceeded."""
+    
+    def __init__(self, message: str, retry_after: int = 60, **kwargs):
+        super().__init__(
+            message=message,
+            category=ErrorCategory.RATE_LIMIT,
+            severity=ErrorSeverity.MEDIUM,
+            **kwargs
+        )
+        self.details["retry_after"] = retry_after
+
+
+class LLMValidationError(LLMError):
+    """LLM response validation failed."""
+    
+    def __init__(self, message: str, raw_response: Optional[str] = None, validation_errors: Optional[List[str]] = None, **kwargs):
+        super().__init__(
+            message=message,
+            category=ErrorCategory.VALIDATION,
+            severity=ErrorSeverity.MEDIUM,
+            **kwargs
+        )
+        if raw_response:
+            self.details["raw_response"] = raw_response[:500]  # Truncate to avoid huge logs
+        if validation_errors:
+            self.details["validation_errors"] = validation_errors
+
+
+class LLMTimeoutError(LLMError):
+    """LLM request timed out."""
+    
+    def __init__(self, message: str, timeout_duration: float, **kwargs):
+        super().__init__(
+            message=message,
+            category=ErrorCategory.TIMEOUT,
+            severity=ErrorSeverity.MEDIUM,
+            **kwargs
+        )
+        self.details["timeout_duration"] = timeout_duration
+
+
+class LLMQuotaExceededError(LLMError):
+    """LLM service quota exceeded."""
+    
+    def __init__(self, message: str, quota_type: Optional[str] = None, **kwargs):
+        super().__init__(
+            message=message,
+            severity=ErrorSeverity.HIGH,
+            **kwargs
+        )
+        if quota_type:
+            self.details["quota_type"] = quota_type
+
+
 def get_user_friendly_message(error: PersonalitySystemError) -> str:
     """Generate user-friendly error messages based on error type."""
     
@@ -178,7 +264,9 @@ def get_user_friendly_message(error: PersonalitySystemError) -> str:
         ErrorCategory.RATE_LIMIT: "I'm being rate limited by external services.",
         ErrorCategory.SYSTEM: "Something went wrong on our end.",
         ErrorCategory.AUTHENTICATION: "There's an authentication issue.",
-        ErrorCategory.TIMEOUT: "The operation took too long to complete."
+        ErrorCategory.TIMEOUT: "The operation took too long to complete.",
+        ErrorCategory.LLM: "I encountered an issue with the AI service.",
+        ErrorCategory.VALIDATION: "I received an invalid response from the AI service."
     }
     
     base_message = base_messages.get(error.category, "An unexpected error occurred.")
@@ -230,6 +318,17 @@ def get_error_suggestions(error: PersonalitySystemError) -> List[str]:
             "Try again in a few moments",
             "Contact support if the problem persists",
             "Check the system status page"
+        ],
+        ErrorCategory.LLM: [
+            "Try again with a different AI provider",
+            "Wait a moment and try again",
+            "Use simpler language in your description",
+            "Try using fallback research methods"
+        ],
+        ErrorCategory.VALIDATION: [
+            "The AI response was malformed, trying again may help",
+            "Consider rephrasing your personality description",
+            "Try using a more specific character name or archetype"
         ]
     }
     
@@ -438,6 +537,404 @@ def log_error(
             logger.info("Low severity error occurred", extra=log_data)
     else:
         logger.error("Unexpected error occurred", extra=log_data)
+
+
+def log_llm_request(
+    provider: str,
+    model: str,
+    prompt: str,
+    request_id: Optional[str] = None,
+    max_tokens: Optional[int] = None,
+    temperature: Optional[float] = None
+):
+    """
+    Log LLM request details.
+    
+    Args:
+        provider: LLM provider name
+        model: Model name
+        prompt: Request prompt (truncated for security)
+        request_id: Request identifier
+        max_tokens: Maximum tokens requested
+        temperature: Temperature setting
+    """
+    
+    log_data = {
+        "event_type": "llm_request",
+        "provider": provider,
+        "model": model,
+        "prompt_length": len(prompt),
+        "prompt_preview": prompt[:200] + "..." if len(prompt) > 200 else prompt,
+        "request_id": request_id,
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+        "timestamp": datetime.now().isoformat()
+    }
+    
+    logger.info("LLM request initiated", extra=log_data)
+
+
+def log_llm_response(
+    provider: str,
+    model: str,
+    response: str,
+    request_id: Optional[str] = None,
+    duration: Optional[float] = None,
+    tokens_used: Optional[int] = None,
+    success: bool = True
+):
+    """
+    Log LLM response details.
+    
+    Args:
+        provider: LLM provider name
+        model: Model name
+        response: Response text (truncated for security)
+        request_id: Request identifier
+        duration: Response time in seconds
+        tokens_used: Number of tokens used
+        success: Whether the response was successful
+    """
+    
+    log_data = {
+        "event_type": "llm_response",
+        "provider": provider,
+        "model": model,
+        "response_length": len(response),
+        "response_preview": response[:200] + "..." if len(response) > 200 else response,
+        "request_id": request_id,
+        "duration_seconds": duration,
+        "tokens_used": tokens_used,
+        "success": success,
+        "timestamp": datetime.now().isoformat()
+    }
+    
+    if success:
+        logger.info("LLM response received", extra=log_data)
+    else:
+        logger.warning("LLM response failed", extra=log_data)
+
+
+def log_llm_fallback(
+    provider: str,
+    model: str,
+    fallback_method: str,
+    reason: str,
+    request_id: Optional[str] = None
+):
+    """
+    Log when LLM fallback is triggered.
+    
+    Args:
+        provider: Failed LLM provider
+        model: Failed model
+        fallback_method: Method used for fallback
+        reason: Reason for fallback
+        request_id: Request identifier
+    """
+    
+    log_data = {
+        "event_type": "llm_fallback",
+        "failed_provider": provider,
+        "failed_model": model,
+        "fallback_method": fallback_method,
+        "fallback_reason": reason,
+        "request_id": request_id,
+        "timestamp": datetime.now().isoformat()
+    }
+    
+    logger.warning("LLM fallback triggered", extra=log_data)
+
+
+class LLMErrorRecovery:
+    """Error recovery mechanisms for common LLM failure scenarios."""
+    
+    @staticmethod
+    async def recover_from_rate_limit(
+        provider: str,
+        retry_after: int,
+        fallback_providers: Optional[List[str]] = None
+    ) -> Dict[str, Any]:
+        """
+        Recover from rate limit errors.
+        
+        Args:
+            provider: Provider that hit rate limit
+            retry_after: Seconds to wait before retry
+            fallback_providers: Alternative providers to try
+            
+        Returns:
+            Recovery strategy information
+        """
+        recovery_strategy = {
+            "strategy": "rate_limit_recovery",
+            "failed_provider": provider,
+            "retry_after": retry_after,
+            "recommended_action": None,
+            "fallback_available": bool(fallback_providers)
+        }
+        
+        if retry_after <= 60:  # Short wait
+            recovery_strategy["recommended_action"] = "wait_and_retry"
+        elif fallback_providers:  # Switch providers
+            recovery_strategy["recommended_action"] = "switch_provider"
+            recovery_strategy["fallback_providers"] = fallback_providers
+        else:  # Use cache or alternative methods
+            recovery_strategy["recommended_action"] = "use_fallback_research"
+        
+        return recovery_strategy
+    
+    @staticmethod
+    async def recover_from_validation_error(
+        raw_response: str,
+        validation_errors: List[str]
+    ) -> Dict[str, Any]:
+        """
+        Attempt to recover from response validation errors.
+        
+        Args:
+            raw_response: Raw LLM response that failed validation
+            validation_errors: List of validation errors
+            
+        Returns:
+            Recovery attempt information
+        """
+        recovery_strategy = {
+            "strategy": "validation_recovery",
+            "recovery_attempts": [],
+            "success": False,
+            "recovered_data": None
+        }
+        
+        # Attempt 1: Try to extract partial JSON
+        try:
+            import re
+            json_match = re.search(r'\{.*\}', raw_response, re.DOTALL)
+            if json_match:
+                partial_json = json_match.group()
+                import json
+                parsed_data = json.loads(partial_json)
+                recovery_strategy["recovery_attempts"].append({
+                    "method": "partial_json_extraction",
+                    "success": True,
+                    "data": parsed_data
+                })
+                recovery_strategy["success"] = True
+                recovery_strategy["recovered_data"] = parsed_data
+                return recovery_strategy
+        except Exception as e:
+            recovery_strategy["recovery_attempts"].append({
+                "method": "partial_json_extraction",
+                "success": False,
+                "error": str(e)
+            })
+        
+        # Attempt 2: Try to fix common JSON issues
+        try:
+            # Fix common issues: missing quotes, trailing commas, etc.
+            fixed_response = raw_response
+            
+            # Remove extra text before/after JSON
+            import re
+            json_pattern = r'\{(?:[^{}]|{[^{}]*})*\}'
+            matches = re.findall(json_pattern, fixed_response, re.DOTALL)
+            if matches:
+                fixed_response = matches[0]
+                
+                # Try to parse fixed JSON
+                import json
+                parsed_data = json.loads(fixed_response)
+                recovery_strategy["recovery_attempts"].append({
+                    "method": "json_repair",
+                    "success": True,
+                    "data": parsed_data
+                })
+                recovery_strategy["success"] = True
+                recovery_strategy["recovered_data"] = parsed_data
+                return recovery_strategy
+        except Exception as e:
+            recovery_strategy["recovery_attempts"].append({
+                "method": "json_repair",
+                "success": False,
+                "error": str(e)
+            })
+        
+        # Attempt 3: Extract key information with regex
+        try:
+            extracted_data = {}
+            
+            # Extract name
+            name_match = re.search(r'"name"\s*:\s*"([^"]+)"', raw_response)
+            if name_match:
+                extracted_data["name"] = name_match.group(1)
+            
+            # Extract type
+            type_match = re.search(r'"type"\s*:\s*"([^"]+)"', raw_response)
+            if type_match:
+                extracted_data["type"] = type_match.group(1)
+            
+            # Extract description
+            desc_match = re.search(r'"description"\s*:\s*"([^"]+)"', raw_response)
+            if desc_match:
+                extracted_data["description"] = desc_match.group(1)
+            
+            if extracted_data:
+                recovery_strategy["recovery_attempts"].append({
+                    "method": "regex_extraction",
+                    "success": True,
+                    "data": extracted_data
+                })
+                recovery_strategy["success"] = True
+                recovery_strategy["recovered_data"] = extracted_data
+                return recovery_strategy
+        except Exception as e:
+            recovery_strategy["recovery_attempts"].append({
+                "method": "regex_extraction",
+                "success": False,
+                "error": str(e)
+            })
+        
+        return recovery_strategy
+    
+    @staticmethod
+    async def recover_from_connection_error(
+        provider: str,
+        endpoint: str,
+        error_details: str
+    ) -> Dict[str, Any]:
+        """
+        Attempt to recover from connection errors.
+        
+        Args:
+            provider: Provider that failed
+            endpoint: Failed endpoint
+            error_details: Error details
+            
+        Returns:
+            Recovery strategy information
+        """
+        recovery_strategy = {
+            "strategy": "connection_recovery",
+            "failed_provider": provider,
+            "failed_endpoint": endpoint,
+            "error_details": error_details,
+            "recommended_actions": []
+        }
+        
+        # Analyze error type
+        error_lower = error_details.lower()
+        
+        if "timeout" in error_lower:
+            recovery_strategy["recommended_actions"].extend([
+                "retry_with_longer_timeout",
+                "check_network_connectivity",
+                "switch_to_fallback_provider"
+            ])
+        elif "dns" in error_lower or "resolve" in error_lower:
+            recovery_strategy["recommended_actions"].extend([
+                "check_dns_settings",
+                "verify_endpoint_url",
+                "switch_to_fallback_provider"
+            ])
+        elif "certificate" in error_lower or "ssl" in error_lower:
+            recovery_strategy["recommended_actions"].extend([
+                "verify_ssl_certificates",
+                "check_system_time",
+                "disable_ssl_verification_temporarily"
+            ])
+        elif "authentication" in error_lower or "401" in error_lower:
+            recovery_strategy["recommended_actions"].extend([
+                "verify_api_key",
+                "check_api_key_permissions",
+                "regenerate_api_key"
+            ])
+        else:
+            recovery_strategy["recommended_actions"].extend([
+                "retry_with_exponential_backoff",
+                "check_service_status",
+                "switch_to_fallback_provider"
+            ])
+        
+        return recovery_strategy
+
+
+async def recover_from_llm_error(error: LLMError, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """
+    Orchestrate recovery from LLM errors.
+    
+    Args:
+        error: LLM error that occurred
+        context: Additional context for recovery
+        
+    Returns:
+        Recovery plan with recommended actions
+    """
+    recovery_plan = {
+        "error_type": type(error).__name__,
+        "recovery_strategy": None,
+        "immediate_actions": [],
+        "long_term_actions": [],
+        "fallback_available": True
+    }
+    
+    if isinstance(error, LLMRateLimitError):
+        retry_after = error.details.get("retry_after", 60)
+        provider = error.details.get("provider", "unknown")
+        fallback_providers = context.get("fallback_providers", []) if context else []
+        
+        recovery_strategy = await LLMErrorRecovery.recover_from_rate_limit(
+            provider, retry_after, fallback_providers
+        )
+        recovery_plan["recovery_strategy"] = recovery_strategy
+        
+        if recovery_strategy["recommended_action"] == "wait_and_retry":
+            recovery_plan["immediate_actions"].append(f"Wait {retry_after} seconds and retry")
+        elif recovery_strategy["recommended_action"] == "switch_provider":
+            recovery_plan["immediate_actions"].append("Switch to alternative LLM provider")
+        else:
+            recovery_plan["immediate_actions"].append("Use fallback research methods")
+    
+    elif isinstance(error, LLMValidationError):
+        raw_response = error.details.get("raw_response", "")
+        validation_errors = error.details.get("validation_errors", [])
+        
+        recovery_strategy = await LLMErrorRecovery.recover_from_validation_error(
+            raw_response, validation_errors
+        )
+        recovery_plan["recovery_strategy"] = recovery_strategy
+        
+        if recovery_strategy["success"]:
+            recovery_plan["immediate_actions"].append("Use recovered data from response")
+        else:
+            recovery_plan["immediate_actions"].extend([
+                "Retry request with refined prompt",
+                "Use fallback research methods"
+            ])
+    
+    elif isinstance(error, LLMConnectionError):
+        provider = error.details.get("provider", "unknown")
+        endpoint = error.details.get("endpoint", "unknown")
+        
+        recovery_strategy = await LLMErrorRecovery.recover_from_connection_error(
+            provider, endpoint, str(error)
+        )
+        recovery_plan["recovery_strategy"] = recovery_strategy
+        recovery_plan["immediate_actions"].extend(recovery_strategy["recommended_actions"][:2])
+        recovery_plan["long_term_actions"].extend(recovery_strategy["recommended_actions"][2:])
+    
+    else:
+        recovery_plan["immediate_actions"].extend([
+            "Log error details for investigation",
+            "Use fallback research methods",
+            "Monitor for pattern of similar errors"
+        ])
+        recovery_plan["long_term_actions"].extend([
+            "Review LLM provider configuration",
+            "Consider alternative providers",
+            "Update error handling logic"
+        ])
+    
+    return recovery_plan
 
 
 def error_handler(

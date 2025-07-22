@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   backend:
     build:
@@ -25,25 +23,28 @@ services:
     networks:
       - covibe-network
 
-  frontend:
-    build:
-      context: ./web
-      dockerfile: Dockerfile
-    container_name: covibe-frontend
-    ports:
-      - "80:80"
-    depends_on:
-      backend:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-    restart: unless-stopped
-    networks:
-      - covibe-network
+  # Frontend service - commented out due to build issues
+  # Uncomment and fix build issues if you need the full web interface
+  # For development, run: cd web && npm run dev
+  # frontend:
+  #   build:
+  #     context: ./web
+  #     dockerfile: Dockerfile
+  #   container_name: covibe-frontend
+  #   ports:
+  #     - "80:80"
+  #   depends_on:
+  #     backend:
+  #       condition: service_healthy
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost/health"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 3
+  #     start_period: 40s
+  #   restart: unless-stopped
+  #   networks:
+  #     - covibe-network
 
   # Optional: Redis for caching
   redis:

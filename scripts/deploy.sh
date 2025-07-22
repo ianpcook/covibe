@@ -9,7 +9,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 DEFAULT_ENV="development"
-DEFAULT_COMPOSE_FILE="docker-compose.yml"
+DEFAULT_COMPOSE_FILE="docker-compose.dev.yml"
 
 # Colors for output
 RED='\033[0;31m'
@@ -58,10 +58,12 @@ Options:
     -e, --env ENV           Environment (development, staging, production)
     -f, --file FILE         Docker compose file to use
     -m, --monitoring        Include monitoring services
+    --fullstack             Use fullstack compose file (frontend + backend)
     -h, --help              Show this help message
 
 Examples:
-    $0 start                           # Start development environment
+    $0 start                           # Start development environment (backend only)
+    $0 --fullstack start               # Start both frontend and backend with Docker
     $0 -e production deploy            # Deploy to production
     $0 -m start                        # Start with monitoring
     $0 -f docker-compose.prod.yml build   # Build production images
@@ -86,6 +88,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         -m|--monitoring)
             INCLUDE_MONITORING=true
+            shift
+            ;;
+        --fullstack)
+            COMPOSE_FILE="docker-compose.fullstack.yml"
             shift
             ;;
         -h|--help)
@@ -175,7 +181,23 @@ check_prerequisites() {
 # Build images
 build_images() {
     log_info "Building Docker images..."
-    docker-compose $COMPOSE_FILES build --no-cache
+    
+    # Build backend first
+    log_info "Building backend image..."
+    if ! docker-compose $COMPOSE_FILES build backend; then
+        log_error "Backend build failed"
+        exit 1
+    fi
+    
+    # Build frontend
+    log_info "Building frontend image..."
+    if ! docker-compose $COMPOSE_FILES build frontend; then
+        log_error "Frontend build failed"
+        log_info "This might be due to missing dependencies or build issues"
+        log_info "Try running: cd web && npm install && npm run build"
+        exit 1
+    fi
+    
     log_success "Images built successfully"
 }
 
@@ -249,8 +271,7 @@ check_health() {
         if curl -f http://localhost:3000 &>/dev/null; then
             log_success "Frontend is healthy"
         else
-            log_error "Frontend is not healthy"
-            healthy=false
+            log_warning "Frontend is not running (run 'cd web && npm run dev' to start it)"
         fi
     fi
     

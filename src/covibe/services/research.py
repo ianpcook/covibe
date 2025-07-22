@@ -3,8 +3,12 @@
 import asyncio
 import httpx
 import json
+import os
 from typing import List, Dict, Optional, Tuple, Any
 from datetime import datetime
+from pathlib import Path
+import uuid
+
 from ..models.core import (
     PersonalityProfile,
     PersonalityTrait,
@@ -16,18 +20,51 @@ from ..models.core import (
     TechnicalLevel,
     ResearchResult
 )
+from ..models.llm import (
+    LLMPersonalityResponse,
+    validate_llm_response,
+    convert_llm_to_profile,
+    validate_and_repair_llm_response,
+    LLMValidationError,
+    LLMParsingError
+)
 from ..utils.validation import sanitize_text, detect_personality_type
 from ..utils.error_handling import (
     ResearchError, NetworkError, InputValidationError, RateLimitError,
     error_handler, ErrorCategory, RetryConfig, with_retry, ErrorContext
 )
 from ..utils.monitoring import record_error, performance_monitor
+from .llm_client import (
+    LLMClient,
+    create_openai_client,
+    create_anthropic_client,
+    create_local_client,
+    LLMConnectionError,
+    LLMRateLimitError,
+    LLMTimeoutError
+)
+from .prompt_manager import (
+    PromptConfig,
+    load_prompt_config,
+    render_prompt,
+    get_default_prompt_config
+)
+from .llm_cache import (
+    CacheClient,
+    CachedLLMResponse,
+    InMemoryCache,
+    generate_cache_key,
+    find_similar_cached_response
+)
 
 
 # Research configuration
 WIKIPEDIA_API_BASE = "https://en.wikipedia.org/api/rest_v1"
 REQUEST_TIMEOUT = 10.0
 MAX_CONCURRENT_REQUESTS = 3
+
+# Import timedelta for cache expiration
+from datetime import timedelta
 
 
 def get_character_data(query: str) -> Tuple[Optional[Dict[str, Any]], float]:
@@ -440,8 +477,12 @@ def create_profile_from_archetype(data: Dict[str, Any], confidence: float) -> Op
             last_updated=datetime.now()
         )
         
+        # Generate unique ID for each profile instance
+        import uuid
+        profile_id = str(uuid.uuid4())
+        
         return PersonalityProfile(
-            id=f"arch_{data.get('name', 'unknown').replace(' ', '_').lower()}",
+            id=profile_id,
             name=data.get("name", "Unknown Archetype"),
             type=PersonalityType.ARCHETYPE,
             traits=traits,
@@ -483,8 +524,12 @@ def create_profile_from_character(data: Dict[str, Any], confidence: float) -> Op
             last_updated=datetime.now()
         )
         
+        # Generate unique ID for each profile instance
+        import uuid
+        profile_id = str(uuid.uuid4())
+        
         return PersonalityProfile(
-            id=f"char_{data.get('name', 'unknown').replace(' ', '_').lower()}",
+            id=profile_id,
             name=data.get("name", "Unknown Character"),
             type=PersonalityType.FICTIONAL,
             traits=traits,
@@ -531,8 +576,12 @@ def create_profile_from_wikipedia(data: Dict[str, Any], confidence: float) -> Op
             last_updated=datetime.now()
         )
         
+        # Generate unique ID for each profile instance
+        import uuid
+        profile_id = str(uuid.uuid4())
+        
         return PersonalityProfile(
-            id=f"wiki_{data.get('title', 'unknown').replace(' ', '_').lower()}",
+            id=profile_id,
             name=data.get("title", "Unknown Person"),
             type=PersonalityType.CELEBRITY,
             traits=traits,
@@ -544,6 +593,198 @@ def create_profile_from_wikipedia(data: Dict[str, Any], confidence: float) -> Op
     except Exception as e:
         print(f"Failed to create profile from Wikipedia data: {e}")
         return None
+
+
+@performance_monitor("llm_research", "research")
+async def research_personality_with_llm(
+    description: str,
+    llm_client: LLMClient,
+    prompt_config: PromptConfig,
+    cache_client: Optional[CacheClient] = None
+) -> ResearchResult:
+    """Primary research function using LLM analysis.
+    
+    Args:
+        description: Personality description to analyze
+        llm_client: LLM client for generating responses
+        prompt_config: Prompt configuration for analysis
+        cache_client: Optional cache client for response caching
+        
+    Returns:
+        ResearchResult with LLM-generated personality profile
+    """
+    errors = []
+    suggestions = []
+    
+    try:
+        # Check cache first if available
+        if cache_client:
+            # Get provider and model from client attributes
+            provider = getattr(llm_client, 'provider', 'unknown')
+            model = getattr(llm_client, 'model', 'unknown')
+            cache_key = generate_cache_key(
+                description,
+                provider,
+                model
+            )
+            cached_response = await cache_client.get(cache_key)
+            
+            if cached_response:
+                # Convert cached response to profile
+                profile = await convert_llm_to_profile(
+                    cached_response.response,
+                    str(uuid.uuid4()),
+                    provider,
+                    model
+                )
+                
+                return ResearchResult(
+                    query=description,
+                    profiles=[profile],
+                    confidence=cached_response.response.confidence,
+                    suggestions=[],
+                    errors=[]
+                )
+        
+        # Render prompt with description
+        prompt = await render_prompt(prompt_config, description=description)
+        
+        # Generate response from LLM
+        response_text = await llm_client.generate_response(
+            prompt,
+            max_tokens=prompt_config.max_tokens,
+            temperature=prompt_config.temperature
+        )
+        
+        # Validate and parse LLM response
+        llm_response = await validate_and_repair_llm_response(response_text)
+        
+        # Convert to personality profile
+        profile = await convert_llm_to_profile(
+            llm_response,
+            str(uuid.uuid4()),
+            provider,
+            model
+        )
+        
+        # Cache the response if cache is available
+        if cache_client:
+            cached_entry = CachedLLMResponse(
+                query_hash=cache_key,
+                response=llm_response,
+                created_at=datetime.now(),
+                expires_at=datetime.now() + timedelta(hours=24),
+                llm_provider=provider,
+                llm_model=model
+            )
+            await cache_client.set(cache_key, cached_entry)
+        
+        return ResearchResult(
+            query=description,
+            profiles=[profile],
+            confidence=llm_response.confidence,
+            suggestions=suggestions,
+            errors=errors
+        )
+        
+    except (LLMConnectionError, LLMTimeoutError) as e:
+        record_error(e, "research")
+        errors.append(f"LLM connection error: {str(e)}")
+        raise NetworkError(
+            f"Failed to connect to LLM service: {str(e)}",
+            suggestions=["Check your internet connection", "Try again later"]
+        )
+        
+    except LLMRateLimitError as e:
+        record_error(e, "research")
+        errors.append(f"LLM rate limit exceeded: {str(e)}")
+        raise RateLimitError(
+            f"LLM rate limit exceeded",
+            retry_after=e.retry_after,
+            suggestions=[f"Wait {e.retry_after} seconds before retrying"]
+        )
+        
+    except (LLMValidationError, LLMParsingError) as e:
+        record_error(e, "research")
+        errors.append(f"LLM response validation failed: {str(e)}")
+        # Don't raise, fall back to traditional research
+        return ResearchResult(
+            query=description,
+            profiles=[],
+            confidence=0.0,
+            suggestions=[
+                "LLM response was invalid, please try rephrasing your description",
+                "Try using more specific character names or traits"
+            ],
+            errors=errors
+        )
+        
+    except Exception as e:
+        record_error(e, "research")
+        errors.append(f"Unexpected LLM error: {str(e)}")
+        # Don't raise, fall back to traditional research
+        return ResearchResult(
+            query=description,
+            profiles=[],
+            confidence=0.0,
+            suggestions=generate_research_suggestions(description),
+            errors=errors
+        )
+
+
+async def fallback_research_personality(description: str) -> ResearchResult:
+    """Fallback to existing research methods when LLM fails.
+    
+    This uses the existing character data, archetype data, and Wikipedia research.
+    """
+    profiles = []
+    errors = []
+    suggestions = []
+    
+    # Try character data first
+    character_data, character_confidence = get_character_data(description)
+    if character_data and character_confidence > 0.5:
+        profile = create_profile_from_character(character_data, character_confidence)
+        if profile:
+            profiles.append(profile)
+    
+    # Try archetype data if no character found
+    if not profiles:
+        archetype_data, archetype_confidence = get_archetype_data(description)
+        if archetype_data and archetype_confidence > 0.3:
+            profile = create_profile_from_archetype(archetype_data, archetype_confidence)
+            if profile:
+                profiles.append(profile)
+    
+    # Try Wikipedia as last resort
+    if not profiles:
+        try:
+            async with httpx.AsyncClient() as client:
+                wikipedia_data, wikipedia_confidence = await research_wikipedia(
+                    description, client
+                )
+                if wikipedia_data and wikipedia_confidence > 0.5:
+                    profile = create_profile_from_wikipedia(wikipedia_data, wikipedia_confidence)
+                    if profile:
+                        profiles.append(profile)
+        except Exception as e:
+            record_error(e, "research")
+            errors.append(f"Wikipedia research failed: {str(e)}")
+    
+    # Generate suggestions if no results
+    if not profiles:
+        suggestions = generate_research_suggestions(description)
+    
+    # Calculate overall confidence
+    overall_confidence = max([0.0] + [p.sources[0].confidence for p in profiles if p.sources])
+    
+    return ResearchResult(
+        query=description,
+        profiles=profiles,
+        confidence=overall_confidence,
+        suggestions=suggestions,
+        errors=errors
+    )
 
 
 def generate_research_suggestions(description: str) -> List[str]:
@@ -589,8 +830,23 @@ def generate_research_suggestions(description: str) -> List[str]:
     retry_config=RetryConfig(max_attempts=2, base_delay=1.0)
 )
 @performance_monitor("personality_research", "research")
-async def research_personality(description: str) -> ResearchResult:
-    """Research a personality from multiple sources with comprehensive error handling."""
+async def research_personality(
+    description: str,
+    use_llm: bool = True,
+    llm_provider: Optional[str] = None,
+    cache_enabled: bool = True
+) -> ResearchResult:
+    """Research a personality from multiple sources with comprehensive error handling.
+    
+    Args:
+        description: Personality description to research
+        use_llm: Whether to use LLM as primary research method (default: True)
+        llm_provider: Specific LLM provider to use (default: from env or config)
+        cache_enabled: Whether to use response caching (default: True)
+        
+    Returns:
+        ResearchResult with personality profiles and metadata
+    """
     
     # Input validation
     if not description or not description.strip():
@@ -612,70 +868,96 @@ async def research_personality(description: str) -> ResearchResult:
     )
     
     try:
-        # Primary research path: Check character data first (highest priority)
-        character_data, character_confidence = get_character_data(description)
-        if character_data and character_confidence > 0.8:
-            profile = create_profile_from_character(character_data, character_confidence)
-            if profile:
-                profiles.append(profile)
-        
-        # Fallback 1: Check archetype data if no character found
-        if not profiles:
-            archetype_data, archetype_confidence = get_archetype_data(description)
-            if archetype_data and archetype_confidence > 0.3:
-                profile = create_profile_from_archetype(archetype_data, archetype_confidence)
-                if profile:
-                    profiles.append(profile)
-        
-        # Fallback 2: Try Wikipedia research (with retry logic)
-        if not profiles:
+        # Primary research path: Use LLM if enabled
+        if use_llm:
             try:
-                async with httpx.AsyncClient() as client:
-                    wikipedia_data, wikipedia_confidence = await with_retry(
-                        research_wikipedia,
-                        description,
-                        client,
-                        retry_config=RetryConfig(max_attempts=3, base_delay=2.0),
-                        retryable_exceptions=(NetworkError, RateLimitError),
-                        context=context
+                # Load prompt configuration
+                prompt_config_path = Path("config/prompts/personality_analysis.yaml")
+                if prompt_config_path.exists():
+                    prompt_config = await load_prompt_config(prompt_config_path)
+                else:
+                    # Use default prompt if config file doesn't exist
+                    prompt_config = get_default_prompt_config()
+                
+                # Create LLM client based on provider
+                llm_client = None
+                if not llm_provider:
+                    # Try to get from environment or use default
+                    if os.getenv("OPENAI_API_KEY"):
+                        llm_provider = "openai"
+                    elif os.getenv("ANTHROPIC_API_KEY"):
+                        llm_provider = "anthropic"
+                    else:
+                        llm_provider = "local"
+                
+                if llm_provider == "openai":
+                    llm_client = await create_openai_client(
+                        api_key=os.getenv("OPENAI_API_KEY"),
+                        model=prompt_config.model or "gpt-4"
                     )
+                elif llm_provider == "anthropic":
+                    llm_client = await create_anthropic_client(
+                        api_key=os.getenv("ANTHROPIC_API_KEY"),
+                        model="claude-3-sonnet-20240229"
+                    )
+                elif llm_provider == "local":
+                    llm_client = await create_local_client(
+                        endpoint=os.getenv("LOCAL_LLM_ENDPOINT", "http://localhost:11434"),
+                        model="llama2"
+                    )
+                
+                if llm_client:
+                    # Create cache client if enabled
+                    cache_client = None
+                    if cache_enabled:
+                        cache_client = InMemoryCache(max_size=1000)
+                        await cache_client.start()
                     
-                    if wikipedia_data and wikipedia_confidence > 0.5:
-                        # Create profile from Wikipedia data
-                        profile = create_profile_from_wikipedia(wikipedia_data, wikipedia_confidence)
-                        if profile:
-                            profiles.append(profile)
+                    try:
+                        # Try LLM research with retry
+                        llm_result = await with_retry(
+                            research_personality_with_llm,
+                            description,
+                            llm_client,
+                            prompt_config,
+                            cache_client,
+                            retry_config=RetryConfig(max_attempts=2, base_delay=2.0),
+                            retryable_exceptions=(NetworkError, RateLimitError),
+                            context=context
+                        )
+                        
+                        if llm_result.profiles:
+                            # LLM research successful
+                            return llm_result
+                        
+                    finally:
+                        # Clean up cache client
+                        if cache_client and hasattr(cache_client, 'stop'):
+                            await cache_client.stop()
                             
-            except (NetworkError, RateLimitError, ResearchError) as e:
-                # Log the error but don't fail the entire research
+            except Exception as e:
+                # Log LLM errors but don't fail - fall back to traditional research
                 record_error(e, "research")
-                errors.append(f"Wikipedia research failed: {e.message}")
+                errors.append(f"LLM research failed: {str(e)}")
         
-        # Generate helpful suggestions if no good results
-        if not profiles:
-            suggestions = generate_research_suggestions(description)
-            
-            # If we still have no results, this is a research failure
-            if not suggestions:
-                raise ResearchError(
-                    f"No personality information found for '{description}'",
-                    suggestions=[
-                        "Try using specific character names like 'Tony Stark', 'Sherlock Holmes', or 'Einstein'",
-                        "Try archetype descriptions like 'genius', 'mentor', 'drill sergeant', or 'robot'",
-                        "Include more details in your description"
-                    ]
-                )
+        # Fallback to traditional research methods
+        fallback_result = await fallback_research_personality(description)
         
-        # Calculate overall confidence
-        overall_confidence = max([0.0] + [p.sources[0].confidence for p in profiles if p.sources])
+        # Merge errors from LLM attempt with fallback result
+        fallback_result.errors.extend(errors)
         
-        return ResearchResult(
-            query=description,
-            profiles=profiles,
-            confidence=overall_confidence,
-            suggestions=suggestions,
-            errors=errors
-        )
+        # If no results from any method, raise error
+        if not fallback_result.profiles:
+            raise ResearchError(
+                f"No personality information found for '{description}'",
+                suggestions=fallback_result.suggestions or [
+                    "Try using specific character names like 'Tony Stark', 'Sherlock Holmes', or 'Einstein'",
+                    "Try archetype descriptions like 'genius', 'mentor', 'drill sergeant', or 'robot'",
+                    "Include more details in your description"
+                ]
+            )
+        
+        return fallback_result
         
     except (InputValidationError, ResearchError):
         # Re-raise our custom errors
