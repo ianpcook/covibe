@@ -200,3 +200,169 @@ class ErrorResponse(BaseModel):
     error: ErrorDetail
     request_id: str
     timestamp: datetime
+
+
+# Export-specific models for IDE Export System
+
+class ExportFormatOptions(BaseModel):
+    """Options for customizing export format."""
+    file_name: Optional[str] = None
+    include_metadata: bool = True
+    include_instructions: bool = True
+    custom_header: Optional[str] = None
+    preserve_comments: bool = True
+    
+    @field_validator('file_name', 'custom_header')
+    @classmethod
+    def validate_text_fields(cls, v):
+        """Validate and sanitize text fields."""
+        if v is not None:
+            return sanitize_text(v)
+        return v
+
+
+class ExportResult(BaseModel):
+    """Result of export operation."""
+    success: bool
+    content: str
+    file_name: str
+    file_size: int
+    mime_type: str
+    placement_instructions: List[str]
+    metadata: dict = Field(default_factory=dict)
+    error: Optional[str] = None
+    
+    @field_validator('content', 'file_name', 'mime_type')
+    @classmethod
+    def validate_text_fields(cls, v):
+        """Validate and sanitize text fields."""
+        return sanitize_text(v)
+    
+    @field_validator('placement_instructions')
+    @classmethod
+    def validate_instructions(cls, v):
+        """Validate and sanitize instruction list."""
+        return [sanitize_text(instruction) for instruction in v if instruction.strip()]
+
+
+class PreviewResult(BaseModel):
+    """Result of preview generation."""
+    content: str
+    file_name: str
+    file_size: int
+    syntax_language: str
+    placement_instructions: List[str]
+    metadata: dict = Field(default_factory=dict)
+    
+    @field_validator('content', 'file_name', 'syntax_language')
+    @classmethod
+    def validate_text_fields(cls, v):
+        """Validate and sanitize text fields."""
+        return sanitize_text(v)
+    
+    @field_validator('placement_instructions')
+    @classmethod
+    def validate_instructions(cls, v):
+        """Validate and sanitize instruction list."""
+        return [sanitize_text(instruction) for instruction in v if instruction.strip()]
+
+
+class BulkExportRequest(BaseModel):
+    """Request for bulk export operations."""
+    personality_ids: List[str]
+    ide_types: List[str]
+    format_options: Optional[ExportFormatOptions] = None
+    include_readme: bool = True
+    
+    @field_validator('personality_ids', 'ide_types')
+    @classmethod
+    def validate_lists(cls, v):
+        """Validate and sanitize list items."""
+        return [sanitize_text(item) for item in v if item.strip()]
+
+
+class BulkExportResult(BaseModel):
+    """Result of bulk export operation."""
+    success: bool
+    zip_content: bytes
+    file_name: str
+    file_size: int
+    included_configs: List[str]
+    readme_content: str
+    error: Optional[str] = None
+    
+    @field_validator('file_name', 'readme_content')
+    @classmethod
+    def validate_text_fields(cls, v):
+        """Validate and sanitize text fields."""
+        return sanitize_text(v)
+    
+    @field_validator('included_configs')
+    @classmethod
+    def validate_configs(cls, v):
+        """Validate and sanitize config list."""
+        return [sanitize_text(config) for config in v if config.strip()]
+
+
+class ExportMetadata(BaseModel):
+    """Metadata for exported configurations."""
+    export_version: str
+    personality_id: str
+    personality_name: str
+    ide_type: str
+    exported_at: datetime
+    exported_by: Optional[str] = None
+    original_created_at: datetime
+    llm_generated: bool
+    llm_provider: Optional[str] = None
+    confidence: Optional[float] = Field(None, ge=0.0, le=1.0)
+    checksum: str
+    
+    @field_validator('export_version', 'personality_id', 'personality_name', 'ide_type', 'exported_by', 'llm_provider', 'checksum')
+    @classmethod
+    def validate_text_fields(cls, v):
+        """Validate and sanitize text fields."""
+        if v is not None:
+            return sanitize_text(v)
+        return v
+
+
+class ConversionResult(BaseModel):
+    """Result of format conversion."""
+    success: bool
+    converted_content: str
+    target_format: str
+    conversion_notes: List[str]
+    error: Optional[str] = None
+    
+    @field_validator('converted_content', 'target_format')
+    @classmethod
+    def validate_text_fields(cls, v):
+        """Validate and sanitize text fields."""
+        return sanitize_text(v)
+    
+    @field_validator('conversion_notes')
+    @classmethod
+    def validate_notes(cls, v):
+        """Validate and sanitize notes list."""
+        return [sanitize_text(note) for note in v if note.strip()]
+
+
+class IDEFormatDetectionResult(BaseModel):
+    """Result of IDE format detection."""
+    detected_ide: str
+    confidence: float = Field(ge=0.0, le=1.0)
+    format_indicators: List[str]
+    supported: bool
+    
+    @field_validator('detected_ide')
+    @classmethod
+    def validate_ide(cls, v):
+        """Validate and sanitize IDE field."""
+        return sanitize_text(v)
+    
+    @field_validator('format_indicators')
+    @classmethod
+    def validate_indicators(cls, v):
+        """Validate and sanitize indicators list."""
+        return [sanitize_text(indicator) for indicator in v if indicator.strip()]

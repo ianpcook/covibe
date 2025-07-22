@@ -83,3 +83,99 @@ export interface ApiError {
   request_id: string;
   timestamp: string;
 }
+
+// Export-related types
+
+export interface ExportFormatOptions {
+  file_name?: string;
+  include_metadata?: boolean;
+  include_instructions?: boolean;
+  custom_header?: string;
+  preserve_comments?: boolean;
+}
+
+export interface ExportResult {
+  success: boolean;
+  content: string;
+  file_name: string;
+  file_size: number;
+  mime_type: string;
+  placement_instructions: string[];
+  metadata: Record<string, any>;
+  error?: string;
+}
+
+export interface PreviewResult {
+  success: boolean;
+  content: string;
+  file_name: string;
+  file_size: number;
+  syntax_language: string;
+  placement_instructions: string[];
+  metadata: Record<string, any>;
+  error?: string;
+}
+
+export interface BulkExportRequest {
+  personality_ids: string[];
+  ide_types: string[];
+  format_options?: ExportFormatOptions;
+  include_readme?: boolean;
+}
+
+export interface BulkExportResult {
+  success: boolean;
+  zip_content: string; // Base64 encoded
+  file_name: string;
+  file_size: number;
+  included_configs: string[];
+  readme_content: string;
+  error?: string;
+}
+
+export interface ExportMetadata {
+  export_version: string;
+  personality_id: string;
+  personality_name: string;
+  ide_type: string;
+  exported_at: string; // ISO date string
+  exported_by?: string;
+  original_created_at: string; // ISO date string
+  llm_generated: boolean;
+  llm_provider?: string;
+  confidence?: number;
+  checksum: string;
+}
+
+export interface ConversionResult {
+  success: boolean;
+  converted_content: string;
+  target_format: string;
+  conversion_notes: string[];
+  error?: string;
+}
+
+export interface IDEFormatDetectionResult {
+  detected_format: string;
+  confidence: number;
+  format_indicators: string[];
+  suggested_ide_type: string;
+}
+
+// UI-specific export types
+
+export type SupportedIDEType = 'cursor' | 'claude' | 'windsurf' | 'generic';
+
+export interface ExportProgressState {
+  stage: 'idle' | 'preparing' | 'generating' | 'downloading' | 'complete' | 'error';
+  progress: number; // 0-100
+  message: string;
+  error?: string;
+}
+
+export interface ExportUIConfig {
+  showPreview: boolean;
+  selectedIDEType: SupportedIDEType;
+  formatOptions: ExportFormatOptions;
+  isGenerating: boolean;
+}

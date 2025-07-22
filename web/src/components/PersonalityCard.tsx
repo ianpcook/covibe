@@ -11,9 +11,10 @@ interface PersonalityCardProps {
   onDelete?: (config: PersonalityConfig) => void;
   onView?: (config: PersonalityConfig) => void;
   onToggleActive?: (config: PersonalityConfig) => void;
+  onExport?: (config: PersonalityConfig) => void;
   showDetailedStatus?: boolean;
   operationInProgress?: {
-    type: 'delete' | 'toggle' | 'update' | null;
+    type: 'delete' | 'toggle' | 'update' | 'export' | null;
     configId: string | null;
     message: string;
   };
@@ -25,6 +26,7 @@ const PersonalityCard: React.FC<PersonalityCardProps> = ({
   onDelete,
   onView,
   onToggleActive,
+  onExport,
   showDetailedStatus = false,
   operationInProgress,
 }) => {
@@ -122,6 +124,20 @@ const PersonalityCard: React.FC<PersonalityCardProps> = ({
               disabled={isDisabled}
             >
               ✏️
+            </button>
+          )}
+          {onExport && (
+            <button
+              onClick={() => onExport(config)}
+              className="btn btn-sm btn-info"
+              title="Export Configuration"
+              disabled={isDisabled}
+            >
+              {isOperationInProgress && operationInProgress?.type === 'export' ? (
+                <div className="btn-spinner"></div>
+              ) : (
+                '📤'
+              )}
             </button>
           )}
           {onDelete && (

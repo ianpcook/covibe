@@ -12,8 +12,9 @@ interface PersonalityDetailViewProps {
   onEdit: (config: PersonalityConfig) => void;
   onDelete: (config: PersonalityConfig) => void;
   onToggleActive: (config: PersonalityConfig) => void;
+  onExport?: (config: PersonalityConfig) => void;
   operationInProgress?: {
-    type: 'delete' | 'toggle' | 'update' | null;
+    type: 'delete' | 'toggle' | 'update' | 'export' | null;
     configId: string | null;
     message: string;
   };
@@ -25,6 +26,7 @@ const PersonalityDetailView: React.FC<PersonalityDetailViewProps> = ({
   onEdit,
   onDelete,
   onToggleActive,
+  onExport,
   operationInProgress,
 }) => {
   const [showFullContext, setShowFullContext] = useState(false);
@@ -117,6 +119,20 @@ const PersonalityDetailView: React.FC<PersonalityDetailViewProps> = ({
             >
               ✏️ Edit
             </button>
+            {onExport && (
+              <button
+                onClick={() => onExport(config)}
+                className="btn btn-sm btn-info"
+                title="Export Configuration"
+                disabled={isDisabled}
+              >
+                {isOperationInProgress && operationInProgress?.type === 'export' ? (
+                  <div className="btn-spinner"></div>
+                ) : (
+                  '📤 Export'
+                )}
+              </button>
+            )}
             <button
               onClick={handleDelete}
               className="btn btn-sm btn-danger"

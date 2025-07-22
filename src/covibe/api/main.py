@@ -91,6 +91,10 @@ def create_app() -> FastAPI:
                 "name": "monitoring",
                 "description": "System monitoring and health check endpoints",
             },
+            {
+                "name": "export",
+                "description": "IDE configuration export and preview operations",
+            },
         ],
     )
     
@@ -150,9 +154,11 @@ def create_app() -> FastAPI:
     from .personality import router as personality_router
     from .chat import router as chat_router
     from .monitoring import router as monitoring_router
+    from .export import router as export_router
     app.include_router(personality_router)
     app.include_router(chat_router)
     app.include_router(monitoring_router)
+    app.include_router(export_router)
     
     return app
 

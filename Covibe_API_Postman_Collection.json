@@ -1,0 +1,755 @@
+{
+  "info": {
+    "name": "Covibe API - Agent Personality System",
+    "description": "Complete API collection for the Covibe Agent Personality System with IDE export functionality",
+    "version": "1.0.0",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000",
+      "description": "Base URL for the Covibe API server"
+    },
+    {
+      "key": "personality_id",
+      "value": "",
+      "description": "Personality configuration ID for testing"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health & System",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/health",
+              "host": ["{{base_url}}"],
+              "path": ["health"]
+            },
+            "description": "Check API server health status"
+          }
+        },
+        {
+          "name": "Get LLM Provider Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/personality/llm/status",
+              "host": ["{{base_url}}"],
+              "path": ["api", "personality", "llm", "status"]
+            },
+            "description": "Get status of available LLM providers"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Personality Management",
+      "item": [
+        {
+          "name": "Create Personality Configuration",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    pm.collectionVariables.set('personality_id', response.id);",
+                  "    console.log('Personality ID saved:', response.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"description\": \"Tony Stark from Iron Man - genius billionaire playboy philanthropist with wit and sarcasm\",\n  \"user_id\": \"test-user\",\n  \"project_path\": \"/path/to/project\",\n  \"source\": \"api\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/personality/?use_llm=true&llm_provider=openai",
+              "host": ["{{base_url}}"],
+              "path": ["api", "personality", ""],
+              "query": [
+                {
+                  "key": "use_llm",
+                  "value": "true",
+                  "description": "Enable LLM-enhanced research"
+                },
+                {
+                  "key": "llm_provider",
+                  "value": "openai",
+                  "description": "Specific LLM provider (openai, anthropic, local)"
+                }
+              ]
+            },
+            "description": "Create a new personality configuration with LLM enhancement"
+          }
+        },
+        {
+          "name": "Get Personality Configuration",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/personality/{{personality_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "personality", "{{personality_id}}"]
+            },
+            "description": "Retrieve a specific personality configuration by ID"
+          }
+        },
+        {
+          "name": "Update Personality Configuration",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"description\": \"Updated personality description\",\n  \"project_path\": \"/new/project/path\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/personality/{{personality_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "personality", "{{personality_id}}"]
+            },
+            "description": "Update an existing personality configuration"
+          }
+        },
+        {
+          "name": "Delete Personality Configuration",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/personality/{{personality_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "personality", "{{personality_id}}"]
+            },
+            "description": "Delete a personality configuration"
+          }
+        },
+        {
+          "name": "List Personality Configurations",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/personality/configs?user_id=test-user&active_only=true&limit=10&offset=0",
+              "host": ["{{base_url}}"],
+              "path": ["api", "personality", "configs"],
+              "query": [
+                {
+                  "key": "user_id",
+                  "value": "test-user",
+                  "description": "Filter by user ID"
+                },
+                {
+                  "key": "active_only",
+                  "value": "true",
+                  "description": "Only return active configurations"
+                },
+                {
+                  "key": "limit",
+                  "value": "10",
+                  "description": "Maximum number to return"
+                },
+                {
+                  "key": "offset",
+                  "value": "0",
+                  "description": "Number to skip for pagination"
+                }
+              ]
+            },
+            "description": "List personality configurations with filtering and pagination"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Research & Analysis",
+      "item": [
+        {
+          "name": "Research Personality Only",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"description\": \"Sherlock Holmes detective character\",\n  \"use_cache\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/personality/research?use_llm=true&llm_provider=openai",
+              "host": ["{{base_url}}"],
+              "path": ["api", "personality", "research"],
+              "query": [
+                {
+                  "key": "use_llm",
+                  "value": "true",
+                  "description": "Enable LLM research"
+                },
+                {
+                  "key": "llm_provider",
+                  "value": "openai",
+                  "description": "LLM provider to use"
+                }
+              ]
+            },
+            "description": "Research a personality without creating full configuration"
+          }
+        },
+        {
+          "name": "Analyze Personality Input",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"description\": \"funny pirate captain with a parrot\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/personality/analyze",
+              "host": ["{{base_url}}"],
+              "path": ["api", "personality", "analyze"]
+            },
+            "description": "Analyze personality input to determine type and confidence"
+          }
+        },
+        {
+          "name": "Get Personality Suggestions",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"description\": \"wizard character\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/personality/suggestions?max_suggestions=5",
+              "host": ["{{base_url}}"],
+              "path": ["api", "personality", "suggestions"],
+              "query": [
+                {
+                  "key": "max_suggestions",
+                  "value": "5",
+                  "description": "Maximum number of suggestions"
+                }
+              ]
+            },
+            "description": "Get personality suggestions for ambiguous input"
+          }
+        },
+        {
+          "name": "Get Clarification Questions",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"description\": \"smart person\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/personality/clarify",
+              "host": ["{{base_url}}"],
+              "path": ["api", "personality", "clarify"]
+            },
+            "description": "Get clarification questions for unclear input"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Export Functionality",
+      "item": [
+        {
+          "name": "Get Supported IDE Types",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/personality/export/supported-ides",
+              "host": ["{{base_url}}"],
+              "path": ["api", "personality", "export", "supported-ides"]
+            },
+            "description": "Get list of supported IDE types for export"
+          }
+        },
+        {
+          "name": "Export to Cursor IDE",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/personality/{{personality_id}}/export/cursor?include_metadata=true&include_instructions=true",
+              "host": ["{{base_url}}"],
+              "path": ["api", "personality", "{{personality_id}}", "export", "cursor"],
+              "query": [
+                {
+                  "key": "include_metadata",
+                  "value": "true",
+                  "description": "Include export metadata"
+                },
+                {
+                  "key": "include_instructions",
+                  "value": "true",
+                  "description": "Include placement instructions"
+                },
+                {
+                  "key": "file_name",
+                  "value": "custom-personality.mdc",
+                  "description": "Custom file name",
+                  "disabled": true
+                },
+                {
+                  "key": "custom_header",
+                  "value": "Custom header text",
+                  "description": "Custom header",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Export personality configuration as Cursor IDE .mdc file"
+          }
+        },
+        {
+          "name": "Export to Claude",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/personality/{{personality_id}}/export/claude?include_metadata=true&include_instructions=true",
+              "host": ["{{base_url}}"],
+              "path": ["api", "personality", "{{personality_id}}", "export", "claude"],
+              "query": [
+                {
+                  "key": "include_metadata",
+                  "value": "true",
+                  "description": "Include export metadata"
+                },
+                {
+                  "key": "include_instructions",
+                  "value": "true",
+                  "description": "Include placement instructions"
+                }
+              ]
+            },
+            "description": "Export personality configuration as Claude CLAUDE.md file"
+          }
+        },
+        {
+          "name": "Export to Windsurf IDE",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/personality/{{personality_id}}/export/windsurf?include_metadata=true&include_instructions=true",
+              "host": ["{{base_url}}"],
+              "path": ["api", "personality", "{{personality_id}}", "export", "windsurf"],
+              "query": [
+                {
+                  "key": "include_metadata",
+                  "value": "true",
+                  "description": "Include export metadata"
+                },
+                {
+                  "key": "include_instructions",
+                  "value": "true",
+                  "description": "Include placement instructions"
+                }
+              ]
+            },
+            "description": "Export personality configuration as Windsurf .windsurf file"
+          }
+        },
+        {
+          "name": "Export Generic Format",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/personality/{{personality_id}}/export/generic?include_metadata=true&include_instructions=true&custom_header=My Custom Personality",
+              "host": ["{{base_url}}"],
+              "path": ["api", "personality", "{{personality_id}}", "export", "generic"],
+              "query": [
+                {
+                  "key": "include_metadata",
+                  "value": "true",
+                  "description": "Include export metadata"
+                },
+                {
+                  "key": "include_instructions",
+                  "value": "true",
+                  "description": "Include placement instructions"
+                },
+                {
+                  "key": "custom_header",
+                  "value": "My Custom Personality",
+                  "description": "Custom header text"
+                }
+              ]
+            },
+            "description": "Export personality configuration in generic markdown format"
+          }
+        },
+        {
+          "name": "Preview Cursor Export",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/personality/{{personality_id}}/export/cursor/preview?include_metadata=true&include_instructions=true",
+              "host": ["{{base_url}}"],
+              "path": ["api", "personality", "{{personality_id}}", "export", "cursor", "preview"],
+              "query": [
+                {
+                  "key": "include_metadata",
+                  "value": "true",
+                  "description": "Include export metadata"
+                },
+                {
+                  "key": "include_instructions",
+                  "value": "true",
+                  "description": "Include placement instructions"
+                }
+              ]
+            },
+            "description": "Preview Cursor export without downloading"
+          }
+        },
+        {
+          "name": "Preview Claude Export",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/personality/{{personality_id}}/export/claude/preview?include_metadata=true&include_instructions=true",
+              "host": ["{{base_url}}"],
+              "path": ["api", "personality", "{{personality_id}}", "export", "claude", "preview"],
+              "query": [
+                {
+                  "key": "include_metadata",
+                  "value": "true",
+                  "description": "Include export metadata"
+                },
+                {
+                  "key": "include_instructions",
+                  "value": "true",
+                  "description": "Include placement instructions"
+                }
+              ]
+            },
+            "description": "Preview Claude export without downloading"
+          }
+        },
+        {
+          "name": "Preview Windsurf Export",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/personality/{{personality_id}}/export/windsurf/preview?include_metadata=true&include_instructions=true",
+              "host": ["{{base_url}}"],
+              "path": ["api", "personality", "{{personality_id}}", "export", "windsurf", "preview"],
+              "query": [
+                {
+                  "key": "include_metadata",
+                  "value": "true",
+                  "description": "Include export metadata"
+                },
+                {
+                  "key": "include_instructions",
+                  "value": "true",
+                  "description": "Include placement instructions"
+                }
+              ]
+            },
+            "description": "Preview Windsurf export without downloading"
+          }
+        },
+        {
+          "name": "Preview Generic Export",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/personality/{{personality_id}}/export/generic/preview?include_metadata=true&include_instructions=true",
+              "host": ["{{base_url}}"],
+              "path": ["api", "personality", "{{personality_id}}", "export", "generic", "preview"],
+              "query": [
+                {
+                  "key": "include_metadata",
+                  "value": "true",
+                  "description": "Include export metadata"
+                },
+                {
+                  "key": "include_instructions",
+                  "value": "true",
+                  "description": "Include placement instructions"
+                }
+              ]
+            },
+            "description": "Preview generic export without downloading"
+          }
+        }
+      ]
+    },
+    {
+      "name": "IDE Detection",
+      "item": [
+        {
+          "name": "Detect IDE Environment",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/personality/ide/detect?project_path=/path/to/project",
+              "host": ["{{base_url}}"],
+              "path": ["api", "personality", "ide", "detect"],
+              "query": [
+                {
+                  "key": "project_path",
+                  "value": "/path/to/project",
+                  "description": "Path to analyze for IDE detection"
+                }
+              ]
+            },
+            "description": "Detect IDE environment in specified project path"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Configuration Management",
+      "item": [
+        {
+          "name": "Get Configuration History",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/personality/{{personality_id}}/history?limit=10",
+              "host": ["{{base_url}}"],
+              "path": ["api", "personality", "{{personality_id}}", "history"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "10",
+                  "description": "Maximum number of history entries"
+                }
+              ]
+            },
+            "description": "Get configuration change history"
+          }
+        },
+        {
+          "name": "Restore Configuration Version",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/personality/{{personality_id}}/restore/1",
+              "host": ["{{base_url}}"],
+              "path": ["api", "personality", "{{personality_id}}", "restore", "1"]
+            },
+            "description": "Restore configuration to specific version"
+          }
+        },
+        {
+          "name": "Create Backup",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"backup_name\": \"my_personalities_backup\",\n  \"config_ids\": [\"{{personality_id}}\"]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/personality/backup?user_id=test-user",
+              "host": ["{{base_url}}"],
+              "path": ["api", "personality", "backup"],
+              "query": [
+                {
+                  "key": "user_id",
+                  "value": "test-user",
+                  "description": "User ID for backup filtering"
+                }
+              ]
+            },
+            "description": "Create backup of personality configurations"
+          }
+        },
+        {
+          "name": "List Backups",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/personality/backups?user_id=test-user&limit=10",
+              "host": ["{{base_url}}"],
+              "path": ["api", "personality", "backups"],
+              "query": [
+                {
+                  "key": "user_id",
+                  "value": "test-user",
+                  "description": "Filter by user ID"
+                },
+                {
+                  "key": "limit",
+                  "value": "10",
+                  "description": "Maximum number of backups"
+                }
+              ]
+            },
+            "description": "List available backups"
+          }
+        },
+        {
+          "name": "Restore Backup",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/personality/backup/1/restore",
+              "host": ["{{base_url}}"],
+              "path": ["api", "personality", "backup", "1", "restore"]
+            },
+            "description": "Restore configurations from backup"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Cache Management",
+      "item": [
+        {
+          "name": "Get Cache Statistics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/personality/cache/stats",
+              "host": ["{{base_url}}"],
+              "path": ["api", "personality", "cache", "stats"]
+            },
+            "description": "Get personality cache statistics"
+          }
+        },
+        {
+          "name": "Clear Cache",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/personality/cache?clear_all=false",
+              "host": ["{{base_url}}"],
+              "path": ["api", "personality", "cache"],
+              "query": [
+                {
+                  "key": "clear_all",
+                  "value": "false",
+                  "description": "Clear all entries or just expired ones"
+                }
+              ]
+            },
+            "description": "Clear personality cache entries"
+          }
+        }
+      ]
+    }
+  ],
+  "auth": {
+    "type": "noauth"
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Add timestamp to requests for debugging",
+          "pm.request.headers.add({",
+          "    key: 'X-Request-Timestamp',",
+          "    value: new Date().toISOString()",
+          "});",
+          "",
+          "// Log request details for debugging",
+          "console.log('Request URL:', pm.request.url.toString());",
+          "console.log('Request Method:', pm.request.method);",
+          "if (pm.request.body && pm.request.body.mode === 'raw') {",
+          "    console.log('Request Body:', pm.request.body.raw);",
+          "}"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Log response for debugging",
+          "console.log('Response Status:', pm.response.code);",
+          "console.log('Response Time:', pm.response.responseTime + 'ms');",
+          "",
+          "// Set common test for all requests",
+          "pm.test('Response time is reasonable', function () {",
+          "    pm.expect(pm.response.responseTime).to.be.below(10000); // 10 seconds",
+          "});",
+          "",
+          "pm.test('Response has valid headers', function () {",
+          "    pm.expect(pm.response.headers.get('Content-Type')).to.exist;",
+          "    pm.expect(pm.response.headers.get('X-Request-ID')).to.exist;",
+          "});",
+          "",
+          "// Handle common error responses",
+          "if (pm.response.code >= 400) {",
+          "    console.log('Error Response Body:', pm.response.text());",
+          "}"
+        ]
+      }
+    }
+  ]
+}

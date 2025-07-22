@@ -19,7 +19,12 @@ from ..models.core import (
     CommunicationStyle,
     FormalityLevel,
     VerbosityLevel,
-    TechnicalLevel
+    TechnicalLevel,
+    ExportFormatOptions,
+    ExportResult,
+    PreviewResult,
+    BulkExportRequest,
+    BulkExportResult
 )
 from ..services.orchestration import (
     orchestrate_personality_request,
@@ -35,6 +40,12 @@ from ..services.input_processing import (
     InputType
 )
 from ..services.persistence import ConfigurationPersistenceService
+from ..services.export_generator import (
+    generate_export_file,
+    generate_preview_content,
+    generate_bulk_export,
+    get_supported_ide_types
+)
 from ..integrations.ide_detection import detect_ides, get_primary_ide
 from ..utils.database import get_database_config
 

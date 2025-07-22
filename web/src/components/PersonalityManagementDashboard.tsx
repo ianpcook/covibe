@@ -5,6 +5,9 @@ import PersonalityCard from './PersonalityCard';
 import PersonalityDetailView from './PersonalityDetailView';
 import PersonalityEditForm from './PersonalityEditForm';
 import PersonalitySwitcher from './PersonalitySwitcher';
+import PersonalityExportInterface from './PersonalityExportInterface';
+import BulkExportManager from './BulkExportManager';
+import PersonalityImportInterface from './PersonalityImportInterface';
 import './PersonalityManagementDashboard.css';
 import './PersonalitySwitcher.css';
 
@@ -21,6 +24,9 @@ const PersonalityManagementDashboard: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [selectedConfig, setSelectedConfig] = useState<PersonalityConfig | null>(null);
   const [editingConfig, setEditingConfig] = useState<PersonalityConfig | null>(null);
+  const [exportingConfig, setExportingConfig] = useState<PersonalityConfig | null>(null);
+  const [showBulkExport, setShowBulkExport] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   const [activeConfigId, setActiveConfigId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [sortBy, setSortBy] = useState<'name' | 'created' | 'updated' | 'type'>('updated');
@@ -35,7 +41,7 @@ const PersonalityManagementDashboard: React.FC = () => {
   
   // Real-time feedback states
   const [operationInProgress, setOperationInProgress] = useState<{
-    type: 'delete' | 'toggle' | 'update' | null;
+    type: 'delete' | 'toggle' | 'update' | 'export' | null;
     configId: string | null;
     message: string;
   }>({ type: null, configId: null, message: '' });
@@ -246,6 +252,79 @@ const PersonalityManagementDashboard: React.FC = () => {
     }
   };
 
+  const handleExport = (config: PersonalityConfig) => {
+    setExportingConfig(config);
+  };
+
+  const handleExportComplete = (success: boolean, fileName?: string) => {
+    if (success) {
+      setSuccessMessage(fileName ? `Successfully exported "${fileName}"` : 'Configuration exported successfully');
+      setTimeout(() => setSuccessMessage(null), 3000);
+    }
+    setExportingConfig(null);
+  };
+
+  const handleExportError = (error: string) => {
+    setError(`Export failed: ${error}`);
+    setExportingConfig(null);
+  };
+
+  const handleCancelExport = () => {
+    setExportingConfig(null);
+  };
+
+  const handleBulkExport = () => {
+    setShowBulkExport(true);
+  };
+
+  const handleBulkExportComplete = (success: boolean, fileName?: string) => {
+    if (success) {
+      setSuccessMessage(fileName ? `Successfully exported "${fileName}"` : 'Bulk export completed successfully');
+      setTimeout(() => setSuccessMessage(null), 3000);
+    }
+    setShowBulkExport(false);
+  };
+
+  const handleBulkExportError = (error: string) => {
+    setError(`Bulk export failed: ${error}`);
+    setShowBulkExport(false);
+  };
+
+  const handleCloseBulkExport = () => {
+    setShowBulkExport(false);
+  };
+
+  const handleImport = () => {
+    setShowImport(true);
+  };
+
+  const handleImportComplete = (importedConfig: PersonalityConfig) => {
+    setSuccessMessage(`Successfully imported "${importedConfig.profile.name}"`);
+    setTimeout(() => setSuccessMessage(null), 3000);
+    
+    // Refresh the configurations list
+    const fetchConfigurations = async () => {
+      try {
+        const result = await PersonalityApi.listPersonalityConfigs(100, 0);
+        setConfigurations(result.configurations);
+        calculateStats(result.configurations);
+      } catch (error) {
+        console.error('Failed to refresh configurations:', error);
+      }
+    };
+    fetchConfigurations();
+    
+    setShowImport(false);
+  };
+
+  const handleImportError = (error: string) => {
+    setError(`Import failed: ${error}`);
+  };
+
+  const handleCloseImport = () => {
+    setShowImport(false);
+  };
+
   const handleCancelEdit = () => {
     setEditingConfig(null);
   };
@@ -349,6 +428,21 @@ const PersonalityManagementDashboard: React.FC = () => {
         
         <div className="view-controls">
           <button
+            onClick={handleImport}
+            className="import-button"
+            title="Import Configuration"
+          >
+            📥 Import
+          </button>
+          <button
+            onClick={handleBulkExport}
+            className="bulk-export-button"
+            title="Bulk Export"
+            disabled={configurations.length === 0}
+          >
+            📦 Bulk Export
+          </button>
+          <button
             onClick={() => setViewMode('grid')}
             className={`view-button ${viewMode === 'grid' ? 'active' : ''}`}
             title="Grid View"
@@ -409,6 +503,7 @@ const PersonalityManagementDashboard: React.FC = () => {
               onDelete={handleDelete}
               onView={handleViewDetails}
               onToggleActive={handleToggleActive}
+              onExport={handleExport}
               showDetailedStatus={true}
               operationInProgress={operationInProgress}
             />
@@ -423,8 +518,70 @@ const PersonalityManagementDashboard: React.FC = () => {
           onEdit={handleEdit}
           onDelete={handleDelete}
           onToggleActive={handleToggleActive}
+          onExport={handleExport}
           operationInProgress={operationInProgress}
         />
+      )}
+
+      {exportingConfig && (
+        <div className="modal-backdrop">
+          <div className="export-modal">
+            <div className="modal-header">
+              <h3>Export Configuration</h3>
+              <button onClick={handleCancelExport} className="close-button">
+                ×
+              </button>
+            </div>
+            <div className="modal-body">
+              <PersonalityExportInterface
+                personalityConfig={exportingConfig}
+                onExportComplete={handleExportComplete}
+                onError={handleExportError}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showBulkExport && (
+        <div className="modal-backdrop">
+          <div className="bulk-export-modal">
+            <div className="modal-header">
+              <h3>Bulk Export</h3>
+              <button onClick={handleCloseBulkExport} className="close-button">
+                ×
+              </button>
+            </div>
+            <div className="modal-body">
+              <BulkExportManager
+                availableConfigs={configurations}
+                onClose={handleCloseBulkExport}
+                onExportComplete={handleBulkExportComplete}
+                onError={handleBulkExportError}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showImport && (
+        <div className="modal-backdrop">
+          <div className="import-modal">
+            <div className="modal-header">
+              <h3>Import Configuration</h3>
+              <button onClick={handleCloseImport} className="close-button">
+                ×
+              </button>
+            </div>
+            <div className="modal-body">
+              <PersonalityImportInterface
+                onImportComplete={handleImportComplete}
+                onError={handleImportError}
+                onClose={handleCloseImport}
+              />
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
