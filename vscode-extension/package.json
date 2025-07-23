@@ -1,0 +1,180 @@
+{
+  "name": "covibe-personality-system",
+  "displayName": "Covibe - AI Personality System",
+  "description": "Configure personality traits for your AI coding assistant",
+  "version": "0.2.0",
+  "publisher": "covibe",
+  "engines": {
+    "vscode": "^1.99.3"
+  },
+  "categories": [
+    "Other",
+    "Machine Learning"
+  ],
+  "keywords": [
+    "ai",
+    "personality",
+    "assistant",
+    "claude",
+    "cursor",
+    "windsurf"
+  ],
+  "galleryBanner": {
+    "color": "#1e1e1e",
+    "theme": "dark"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/covibe/vscode-extension"
+  },
+  "license": "MIT",
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "covibe.createPersonality",
+        "title": "Covibe: Create Personality"
+      },
+      {
+        "command": "covibe.listPersonalities",
+        "title": "Covibe: List Personalities"
+      },
+      {
+        "command": "covibe.activatePersonality",
+        "title": "Covibe: Activate Personality"
+      },
+      {
+        "command": "covibe.deletePersonality",
+        "title": "Delete Personality",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "covibe.editPersonality",
+        "title": "Edit Personality",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "covibe.exportPersonality",
+        "title": "Export Personality",
+        "icon": "$(export)"
+      },
+      {
+        "command": "covibe.importPersonality",
+        "title": "Import Personality",
+        "icon": "$(import)"
+      },
+      {
+        "command": "covibe.refreshPersonalities",
+        "title": "Refresh",
+        "icon": "$(refresh)"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "covibe",
+          "title": "Covibe",
+          "icon": "resources/covibe.svg"
+        }
+      ]
+    },
+    "views": {
+      "covibe": [
+        {
+          "id": "covibe.personalities",
+          "name": "Personalities",
+          "icon": "resources/personality.svg",
+          "contextualTitle": "Covibe Personalities"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "covibe.createPersonality",
+          "when": "view == covibe.personalities",
+          "group": "navigation@1"
+        },
+        {
+          "command": "covibe.importPersonality",
+          "when": "view == covibe.personalities",
+          "group": "navigation@2"
+        },
+        {
+          "command": "covibe.refreshPersonalities",
+          "when": "view == covibe.personalities",
+          "group": "navigation@3"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "covibe.activatePersonality",
+          "when": "view == covibe.personalities && viewItem == personality",
+          "group": "inline@1"
+        },
+        {
+          "command": "covibe.editPersonality",
+          "when": "view == covibe.personalities && viewItem != undefined",
+          "group": "inline@2"
+        },
+        {
+          "command": "covibe.exportPersonality",
+          "when": "view == covibe.personalities && viewItem != undefined",
+          "group": "context@1"
+        },
+        {
+          "command": "covibe.deletePersonality",
+          "when": "view == covibe.personalities && viewItem != undefined",
+          "group": "context@2"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Covibe",
+      "properties": {
+        "covibe.autoActivatePersonality": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically activate the default personality on startup"
+        },
+        "covibe.showStatusBar": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show active personality in status bar"
+        },
+        "covibe.enableAIResearch": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable AI-powered personality research (requires API key)"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run esbuild-base -- --minify",
+    "esbuild-base": "node esbuild.config.js",
+    "esbuild": "npm run esbuild-base",
+    "esbuild-watch": "npm run esbuild-base -- --watch",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src --ext ts",
+    "test": "vscode-test",
+    "package": "vsce package",
+    "publish": "vsce publish"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.9",
+    "@types/vscode": "^1.99.0",
+    "@typescript-eslint/eslint-plugin": "^6.21.0",
+    "@typescript-eslint/parser": "^6.21.0",
+    "@vscode/test-cli": "^0.0.4",
+    "@vscode/test-electron": "^2.5.2",
+    "esbuild": "^0.19.12",
+    "eslint": "^8.57.1",
+    "typescript": "^5.8.3"
+  },
+  "activationEvents": [
+    "onStartupFinished"
+  ]
+}
